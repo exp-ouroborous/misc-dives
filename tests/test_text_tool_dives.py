@@ -138,6 +138,29 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn("quoted bare string value", " ".join(result["repairs"]))
         self.assertIn("appended missing closing", " ".join(result["repairs"]))
 
+    def test_heals_missing_comma_between_object_members(self):
+        tool = load_tool("json-pretty-printer")
+
+        result = tool.heal_json('{"name":"Ada" "active":true}')
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
+        self.assertIn("inserted missing comma", " ".join(result["repairs"]))
+        self.assertEqual(result["repaired_source"], '{"name":"Ada", "active":true}')
+        self.assertIn({"text": ",", "added": True}, result["diff_segments"])
+
+    def test_heals_missing_string_end_quote_before_next_key(self):
+        tool = load_tool("json-pretty-printer")
+
+        result = tool.heal_json('{"name":"Ada "active":true}')
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
+        self.assertIn("closed unterminated string value", " ".join(result["repairs"]))
+        self.assertEqual(result["repaired_source"], '{"name":"Ada", "active":true}')
+        self.assertTrue(any(segment["added"] and '"' in segment["text"] for segment in result["diff_segments"]))
+        self.assertTrue(any(segment["added"] and "," in segment["text"] for segment in result["diff_segments"]))
+
     def test_heal_rejects_unfixable_json(self):
         tool = load_tool("json-pretty-printer")
 
@@ -156,6 +179,9 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn('id="allowJsonc"', page)
         self.assertIn("healJson", page)
         self.assertIn("allow_jsonc", page)
+        self.assertIn('id="healedPreview"', page)
+        self.assertIn("renderHealedPreview", page)
+        self.assertIn("json-added", page)
         self.assertIn("renderJsonTree", page)
         self.assertIn("copy-node", page)
         self.assertLess(page.index('id="output"'), page.index('id="jsonTree"'))

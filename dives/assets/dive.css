@@ -623,6 +623,32 @@ pre.output {
   white-space: pre-wrap;
 }
 
+.healed-preview {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.healed-source {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #b8d4c7;
+  border-radius: 7px;
+  background: #f5fbf7;
+  color: var(--ink);
+  padding: 12px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.json-added {
+  border-radius: 3px;
+  background: lightgreen;
+  box-shadow: 0 0 0 1px rgba(32, 125, 73, 0.2);
+}
+
 .error-text {
   color: #ffd9d5;
 }

@@ -64,6 +64,10 @@
               <strong>Run the formatter</strong>
               <span class="result-banner-detail">Validation and structure details will appear here.</span>
             </div>
+            <div id="healedPreview" class="healed-preview" hidden>
+              <div class="field-label">Healed source</div>
+              <pre id="healedPreviewText" class="healed-source"></pre>
+            </div>
             <div class="summary">
               <div class="metric"><b id="rootType">-</b><span>root type</span></div>
               <div class="metric"><b id="totalNodes">0</b><span>nodes</span></div>
@@ -84,6 +88,8 @@
       const sourceEl = document.querySelector("#source");
       const outputEl = document.querySelector("#output");
       const treeEl = document.querySelector("#jsonTree");
+      const healedPreviewEl = document.querySelector("#healedPreview");
+      const healedPreviewTextEl = document.querySelector("#healedPreviewText");
       const runButton = document.querySelector("#run");
       const healButton = document.querySelector("#heal");
       const copyButton = document.querySelector("#copy");
@@ -101,6 +107,7 @@
         healButton.disabled = true;
         setStatus(statusEl, "Formatting JSON...", "loading");
         try {
+          renderHealedPreview(null);
           await renderCurrentJson("JSON valid");
         } catch (error) {
           setStatus(statusEl, "Runtime error", "error");
@@ -131,10 +138,12 @@
             renderJsonBanner(result);
             renderJsonSummary(null);
             renderJsonTree(null);
+            renderHealedPreview(null);
             setText(outputEl, latestOutput);
             return;
           }
 
+          renderHealedPreview(result.repaired ? result : null);
           sourceEl.value = result.output;
           await renderCurrentJson(result.repaired ? "JSON healed" : "Already valid JSON");
         } catch (error) {
@@ -237,6 +246,24 @@
           return;
         }
         treeEl.append(renderJsonNode(tree));
+      }
+
+      function renderHealedPreview(result) {
+        healedPreviewTextEl.replaceChildren();
+        if (!result || !result.repaired) {
+          healedPreviewEl.hidden = true;
+          return;
+        }
+
+        for (const segment of result.diff_segments || []) {
+          const span = document.createElement("span");
+          span.textContent = segment.text;
+          if (segment.added) {
+            span.className = "json-added";
+          }
+          healedPreviewTextEl.append(span);
+        }
+        healedPreviewEl.hidden = false;
       }
 
       function renderJsonNode(node) {

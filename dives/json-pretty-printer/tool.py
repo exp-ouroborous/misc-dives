@@ -1,3 +1,4 @@
+import difflib
 import json
 import re
 
@@ -180,6 +181,18 @@ def _loads_json(source, allow_jsonc=False):
     return json.loads(_json_source(source, allow_jsonc))
 
 
+def _diff_segments(before, after):
+    segments = []
+    matcher = difflib.SequenceMatcher(a=before, b=after, autojunk=False)
+    for tag, _before_start, _before_end, after_start, after_end in matcher.get_opcodes():
+        if tag == "delete":
+            continue
+        text = after[after_start:after_end]
+        if text:
+            segments.append({"text": text, "added": tag in {"insert", "replace"}})
+    return segments
+
+
 def _append_missing_closers(source):
     stack = []
     in_string = False
@@ -224,6 +237,96 @@ def _next_significant(source, index):
     while index < len(source) and source[index].isspace():
         index += 1
     return source[index] if index < len(source) else ""
+
+
+def _looks_like_quoted_key_start(source, quote_index):
+    match = _BARE_KEY_RE.match(source, quote_index + 1)
+    if not match:
+        return False
+    key_end = match.end()
+    return key_end < len(source) and source[key_end] == '"' and _next_significant(source, key_end + 1) == ":"
+
+
+def _insert_before_trailing_space(output, text):
+    index = len(output)
+    while index > 0 and output[index - 1].isspace():
+        index -= 1
+    output[index:index] = list(text)
+
+
+def _repair_missing_string_end_before_key(source):
+    output = []
+    repairs = []
+    i = 0
+    in_string = False
+    escaped = False
+
+    while i < len(source):
+        char = source[i]
+        if in_string:
+            if not escaped and char == '"' and _looks_like_quoted_key_start(source, i):
+                tail = len(output)
+                while tail > 0 and output[tail - 1].isspace():
+                    tail -= 1
+                if tail > 0 and output[tail - 1] == ",":
+                    output.insert(tail - 1, '"')
+                    repairs.append("closed unterminated string value")
+                else:
+                    _insert_before_trailing_space(output, '",')
+                    repairs.append("closed unterminated string value and inserted missing comma")
+                in_string = False
+                continue
+
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        output.append(char)
+        if char == '"':
+            in_string = True
+        i += 1
+
+    return "".join(output), repairs
+
+
+def _insert_missing_commas_before_keys(source):
+    output = []
+    repairs = []
+    i = 0
+    in_string = False
+    escaped = False
+
+    while i < len(source):
+        char = source[i]
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if char == '"' and _looks_like_quoted_key_start(source, i):
+            previous = _previous_significant("".join(output), len(output))
+            if previous and previous not in "{[,":
+                _insert_before_trailing_space(output, ",")
+                repairs.append("inserted missing comma")
+
+        output.append(char)
+        if char == '"':
+            in_string = True
+        i += 1
+
+    return "".join(output), repairs
 
 
 def _quote_bare_keys(source):
@@ -357,13 +460,22 @@ def format_json(source, indent=2, sort_keys=False, minify=False, allow_jsonc=Fal
 
 def heal_json(source, indent=2, sort_keys=True, allow_jsonc=False):
     repairs = []
+    compare_source = _json_source(source, allow_jsonc)
     try:
         parsed = _loads_json(source, allow_jsonc)
     except json.JSONDecodeError as original_error:
-        repaired, closer_repairs, balanced = _append_missing_closers(_json_source(source, allow_jsonc))
+        repaired = compare_source
+
+        repaired, string_repairs = _repair_missing_string_end_before_key(repaired)
+        repairs.extend(string_repairs)
+
+        repaired, closer_repairs, balanced = _append_missing_closers(repaired)
         if not balanced:
             return _json_error_response(original_error, repairs=[], repaired=False)
         repairs.extend(closer_repairs)
+
+        repaired, comma_repairs = _insert_missing_commas_before_keys(repaired)
+        repairs.extend(comma_repairs)
 
         repaired, key_repairs = _quote_bare_keys(repaired)
         repairs.extend(key_repairs)
@@ -376,11 +488,13 @@ def heal_json(source, indent=2, sort_keys=True, allow_jsonc=False):
         except json.JSONDecodeError as repaired_error:
             return _json_error_response(repaired_error, repairs=[], repaired=False)
     else:
-        repaired = source
+        repaired = compare_source
 
     return {
         "ok": True,
         "output": json.dumps(parsed, indent=int(indent), sort_keys=sort_keys),
+        "repaired_source": repaired,
+        "diff_segments": _diff_segments(compare_source, repaired),
         "error": "",
         "line": None,
         "column": None,
