@@ -27,7 +27,10 @@
         <div class="panel">
           <div class="panel-header">
             <h2 class="panel-title">Input</h2>
-            <button id="run" class="button" type="button">Format JSON</button>
+            <div class="panel-actions">
+              <button id="heal" class="button secondary" type="button">Heal JSON</button>
+              <button id="run" class="button" type="button">Format JSON</button>
+            </div>
           </div>
           <div class="panel-body">
             <div class="field">
@@ -77,9 +80,11 @@
       import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
 
       const statusEl = document.querySelector("#status");
+      const sourceEl = document.querySelector("#source");
       const outputEl = document.querySelector("#output");
       const treeEl = document.querySelector("#jsonTree");
       const runButton = document.querySelector("#run");
+      const healButton = document.querySelector("#heal");
       const copyButton = document.querySelector("#copy");
       let pyodideReady;
       let latestOutput = "";
@@ -92,40 +97,81 @@
 
       async function run() {
         runButton.disabled = true;
+        healButton.disabled = true;
         setStatus(statusEl, "Formatting JSON...", "loading");
         try {
-          const pyodide = await pyodideReady;
-          const result = await callPythonJson(pyodide, "format_json", {
-            source: document.querySelector("#source").value,
-            indent: Number(document.querySelector("#indent").value),
-            sort_keys: document.querySelector("#sortKeys").checked,
-            minify: document.querySelector("#minify").checked,
-          });
-          const analysis = await callPythonJson(pyodide, "analyze_json", {
-            source: document.querySelector("#source").value,
-          });
-
-          if (!result.ok) {
-            setStatus(statusEl, `Invalid JSON at ${result.line}:${result.column}`, "error");
-            latestOutput = `${result.error}\nline ${result.line}, column ${result.column}`;
-            renderJsonBanner(analysis);
-            renderJsonSummary(null);
-            renderJsonTree(null);
-          } else {
-            setStatus(statusEl, "JSON valid", "ready");
-            latestOutput = result.output;
-            renderJsonBanner(analysis);
-            renderJsonSummary(analysis.summary);
-            renderJsonTree(analysis.tree);
-          }
-          setText(outputEl, latestOutput);
+          await renderCurrentJson("JSON valid");
         } catch (error) {
           setStatus(statusEl, "Runtime error", "error");
           latestOutput = error.message;
           setText(outputEl, error.stack || error.message);
         } finally {
           runButton.disabled = false;
+          healButton.disabled = false;
         }
+      }
+
+      async function healJson() {
+        runButton.disabled = true;
+        healButton.disabled = true;
+        setStatus(statusEl, "Healing JSON...", "loading");
+        try {
+          const pyodide = await pyodideReady;
+          const result = await callPythonJson(pyodide, "heal_json", {
+            source: sourceEl.value,
+            indent: Number(document.querySelector("#indent").value),
+            sort_keys: document.querySelector("#sortKeys").checked,
+          });
+
+          if (!result.ok) {
+            setStatus(statusEl, `Could not heal at ${result.line}:${result.column}`, "error");
+            latestOutput = `${result.error}\nline ${result.line}, column ${result.column}`;
+            renderJsonBanner(result);
+            renderJsonSummary(null);
+            renderJsonTree(null);
+            setText(outputEl, latestOutput);
+            return;
+          }
+
+          sourceEl.value = result.output;
+          await renderCurrentJson(result.repaired ? "JSON healed" : "Already valid JSON");
+        } catch (error) {
+          setStatus(statusEl, "Runtime error", "error");
+          latestOutput = error.message;
+          setText(outputEl, error.stack || error.message);
+        } finally {
+          runButton.disabled = false;
+          healButton.disabled = false;
+        }
+      }
+
+      async function renderCurrentJson(successMessage) {
+        const pyodide = await pyodideReady;
+        const source = sourceEl.value;
+        const result = await callPythonJson(pyodide, "format_json", {
+          source,
+          indent: Number(document.querySelector("#indent").value),
+          sort_keys: document.querySelector("#sortKeys").checked,
+          minify: document.querySelector("#minify").checked,
+        });
+        const analysis = await callPythonJson(pyodide, "analyze_json", {
+          source,
+        });
+
+        if (!result.ok) {
+          setStatus(statusEl, `Invalid JSON at ${result.line}:${result.column}`, "error");
+          latestOutput = `${result.error}\nline ${result.line}, column ${result.column}`;
+          renderJsonBanner(analysis);
+          renderJsonSummary(null);
+          renderJsonTree(null);
+        } else {
+          setStatus(statusEl, successMessage, "ready");
+          latestOutput = result.output;
+          renderJsonBanner(analysis);
+          renderJsonSummary(analysis.summary);
+          renderJsonTree(analysis.tree);
+        }
+        setText(outputEl, latestOutput);
       }
 
       pyodideReady = init().catch((error) => {
@@ -135,6 +181,7 @@
       });
 
       runButton.addEventListener("click", run);
+      healButton.addEventListener("click", healJson);
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
       document.addEventListener("click", (event) => {
         const button = event.target.closest(".copy-node");

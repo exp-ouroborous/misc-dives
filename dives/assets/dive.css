@@ -150,6 +150,13 @@ a {
   text-transform: uppercase;
 }
 
+.panel-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .panel-body {
   padding: 16px;
 }

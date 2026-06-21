@@ -104,11 +104,34 @@ class JsonToolTests(unittest.TestCase):
         self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["path"], "$.users[0].name")
         self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["preview"], '"Ada"')
 
+    def test_heals_missing_quotes_and_closing_brace(self):
+        tool = load_tool("json-pretty-printer")
+
+        result = tool.heal_json("{name:Ada, active:true")
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["repaired"])
+        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
+        self.assertIn("quoted bare key", " ".join(result["repairs"]))
+        self.assertIn("quoted bare string value", " ".join(result["repairs"]))
+        self.assertIn("appended missing closing", " ".join(result["repairs"]))
+
+    def test_heal_rejects_unfixable_json(self):
+        tool = load_tool("json-pretty-printer")
+
+        result = tool.heal_json("{name:}")
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["repaired"])
+        self.assertIn("Expecting value", result["error"])
+
     def test_json_page_has_explorer_regions(self):
         page = (ROOT / "dives" / "json-pretty-printer" / "index.html").read_text()
 
         self.assertIn('id="jsonBanner"', page)
         self.assertIn('id="jsonTree"', page)
+        self.assertIn('id="heal"', page)
+        self.assertIn("healJson", page)
         self.assertIn("renderJsonTree", page)
         self.assertIn("copy-node", page)
         self.assertLess(page.index('id="output"'), page.index('id="jsonTree"'))
