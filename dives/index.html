@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>misc-dives</title>
+    <link rel="stylesheet" href="assets/dive.css" />
+    <style>
+      .dive-list { display: grid; gap: 14px; margin-top: 8px; }
+      .dive-list a {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        text-decoration: none;
+        color: var(--ink);
+      }
+      .dive-list a:hover { border-left-color: var(--gold); }
+      .dive-list .brand-mark { width: 40px; height: 40px; font-size: 0.9rem; }
+      .dive-list b { font-size: 1.05rem; }
+      .dive-list span { display: block; color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="brand">
+        <div class="brand-mark">md</div>
+        <h1 class="brand-title">misc-dives</h1>
+      </div>
+      <p class="intro">
+        Small, self-contained Pyodide tools that run entirely in your browser. Each
+        dive is also surfaced at <code>wordsfortheunwise.com/learn/&lt;slug&gt;/</code>.
+      </p>
+      <nav class="dive-list" aria-label="Dives">
+        <a href="regex-tester/">
+          <span class="brand-mark">re</span>
+          <span><b>Regex Tester</b><span>Python regular expressions, live.</span></span>
+        </a>
+        <a href="json-pretty-printer/">
+          <span class="brand-mark">js</span>
+          <span><b>JSON Pretty Printer</b><span>Format, sort, and validate JSON.</span></span>
+        </a>
+        <a href="markdown-to-html/">
+          <span class="brand-mark">md</span>
+          <span><b>Markdown to HTML</b><span>Real Python markdown via micropip.</span></span>
+        </a>
+        <a href="text-diff/">
+          <span class="brand-mark">df</span>
+          <span><b>Text Diff</b><span>Unified diffs for two text blocks.</span></span>
+        </a>
+      </nav>
+    </main>
+  </body>
+</html>
