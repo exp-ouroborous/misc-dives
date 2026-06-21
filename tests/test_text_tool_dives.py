@@ -89,6 +89,29 @@ class JsonToolTests(unittest.TestCase):
         self.assertEqual(result["line"], 1)
         self.assertGreater(result["column"], 0)
 
+    def test_analyzes_tree_paths_for_explorer(self):
+        tool = load_tool("json-pretty-printer")
+
+        result = tool.analyze_json('{"users":[{"name":"Ada","active":true}],"count":1}')
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["summary"]["root_type"], "object")
+        self.assertEqual(result["summary"]["total_nodes"], 6)
+        self.assertEqual(result["summary"]["max_depth"], 4)
+        self.assertEqual(result["tree"]["path"], "$")
+        self.assertEqual(result["tree"]["children"][0]["path"], "$.users")
+        self.assertEqual(result["tree"]["children"][0]["children"][0]["path"], "$.users[0]")
+        self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["path"], "$.users[0].name")
+        self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["preview"], '"Ada"')
+
+    def test_json_page_has_explorer_regions(self):
+        page = (ROOT / "dives" / "json-pretty-printer" / "index.html").read_text()
+
+        self.assertIn('id="jsonBanner"', page)
+        self.assertIn('id="jsonTree"', page)
+        self.assertIn("renderJsonTree", page)
+        self.assertIn("copy-node", page)
+
 
 class TextDiffToolTests(unittest.TestCase):
     def test_builds_unified_diff_and_summary(self):

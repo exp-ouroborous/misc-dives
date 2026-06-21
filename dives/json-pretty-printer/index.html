@@ -19,8 +19,8 @@
         <h1 class="brand-title">JSON Pretty Printer</h1>
       </div>
       <p class="intro">
-        Parse, validate, sort, pretty-print, or minify JSON through Python's stdlib
-        JSON module running inside Pyodide.
+        Parse, validate, explore, sort, pretty-print, or minify JSON through Python's
+        stdlib JSON module running inside Pyodide.
       </p>
 
       <section class="tool-grid">
@@ -32,7 +32,7 @@
           <div class="panel-body">
             <div class="field">
               <label for="source">JSON</label>
-              <textarea id="source">{"z":2,"a":{"b":1}}</textarea>
+              <textarea id="source">{"users":[{"name":"Ada","active":true}],"count":1}</textarea>
             </div>
             <div class="controls">
               <label class="check">
@@ -55,6 +55,18 @@
             <button id="copy" class="button secondary" type="button">Copy</button>
           </div>
           <div class="panel-body">
+            <div id="jsonBanner" class="result-banner" data-state="empty">
+              <span class="result-banner-label">JSON</span>
+              <strong>Run the formatter</strong>
+              <span class="result-banner-detail">Validation and structure details will appear here.</span>
+            </div>
+            <div class="summary">
+              <div class="metric"><b id="rootType">-</b><span>root type</span></div>
+              <div class="metric"><b id="totalNodes">0</b><span>nodes</span></div>
+              <div class="metric"><b id="maxDepth">0</b><span>depth</span></div>
+              <div class="metric"><b id="rootCount">0</b><span>root count</span></div>
+            </div>
+            <div id="jsonTree" class="json-tree" aria-live="polite"></div>
             <pre id="output" class="output">Format the sample to see validated JSON.</pre>
           </div>
         </div>
@@ -66,6 +78,7 @@
 
       const statusEl = document.querySelector("#status");
       const outputEl = document.querySelector("#output");
+      const treeEl = document.querySelector("#jsonTree");
       const runButton = document.querySelector("#run");
       const copyButton = document.querySelector("#copy");
       let pyodideReady;
@@ -88,13 +101,22 @@
             sort_keys: document.querySelector("#sortKeys").checked,
             minify: document.querySelector("#minify").checked,
           });
+          const analysis = await callPythonJson(pyodide, "analyze_json", {
+            source: document.querySelector("#source").value,
+          });
 
           if (!result.ok) {
             setStatus(statusEl, `Invalid JSON at ${result.line}:${result.column}`, "error");
             latestOutput = `${result.error}\nline ${result.line}, column ${result.column}`;
+            renderJsonBanner(analysis);
+            renderJsonSummary(null);
+            renderJsonTree(null);
           } else {
             setStatus(statusEl, "JSON valid", "ready");
             latestOutput = result.output;
+            renderJsonBanner(analysis);
+            renderJsonSummary(analysis.summary);
+            renderJsonTree(analysis.tree);
           }
           setText(outputEl, latestOutput);
         } catch (error) {
@@ -114,6 +136,128 @@
 
       runButton.addEventListener("click", run);
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest(".copy-node");
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        copyText(button.dataset.copy || "", statusEl);
+      });
+
+      function renderJsonBanner(result) {
+        const banner = document.querySelector("#jsonBanner");
+        banner.replaceChildren();
+
+        const label = document.createElement("span");
+        label.className = "result-banner-label";
+        label.textContent = "JSON";
+
+        const value = document.createElement("strong");
+        const detail = document.createElement("span");
+        detail.className = "result-banner-detail";
+
+        if (!result.ok) {
+          banner.dataset.state = "no";
+          value.textContent = `Invalid JSON at ${result.line}:${result.column}`;
+          detail.textContent = result.error;
+        } else {
+          banner.dataset.state = "yes";
+          value.textContent = `Valid ${result.summary.root_type}`;
+          detail.textContent = `${result.summary.total_nodes} nodes, depth ${result.summary.max_depth}`;
+        }
+
+        banner.append(label, value, detail);
+      }
+
+      function renderJsonSummary(summary) {
+        setText(document.querySelector("#rootType"), summary ? summary.root_type : "-");
+        setText(document.querySelector("#totalNodes"), summary ? summary.total_nodes : 0);
+        setText(document.querySelector("#maxDepth"), summary ? summary.max_depth : 0);
+        setText(document.querySelector("#rootCount"), summary ? summary.root_count : 0);
+      }
+
+      function renderJsonTree(tree) {
+        treeEl.replaceChildren();
+        if (!tree) {
+          const empty = document.createElement("div");
+          empty.className = "match-empty";
+          empty.textContent = "Fix the JSON error to inspect the tree.";
+          treeEl.append(empty);
+          return;
+        }
+        treeEl.append(renderJsonNode(tree));
+      }
+
+      function renderJsonNode(node) {
+        if (node.children.length > 0) {
+          const details = document.createElement("details");
+          details.className = "json-node";
+          details.open = node.path === "$";
+
+          const summary = document.createElement("summary");
+          summary.append(renderNodeHeader(node));
+          details.append(summary);
+
+          const children = document.createElement("div");
+          children.className = "json-children";
+          for (const child of node.children) {
+            children.append(renderJsonNode(child));
+          }
+          details.append(children);
+          return details;
+        }
+
+        const leaf = document.createElement("div");
+        leaf.className = "json-node json-leaf";
+        leaf.append(renderNodeHeader(node));
+        return leaf;
+      }
+
+      function renderNodeHeader(node) {
+        const header = document.createElement("div");
+        header.className = "json-node-header";
+
+        const main = document.createElement("div");
+        main.className = "json-node-main";
+
+        const type = document.createElement("span");
+        type.className = `type-badge type-${node.type}`;
+        type.textContent = node.type;
+
+        const path = document.createElement("code");
+        path.className = "json-path";
+        path.textContent = node.path;
+
+        main.append(type, path);
+
+        if (node.preview) {
+          const preview = document.createElement("span");
+          preview.className = "json-preview";
+          preview.textContent = node.preview;
+          main.append(preview);
+        } else {
+          const count = document.createElement("span");
+          count.className = "json-preview";
+          count.textContent = `${node.count} ${node.type === "array" ? "items" : "keys"}`;
+          main.append(count);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "json-node-actions";
+        actions.append(copyButtonFor("Path", node.path), copyButtonFor("Value", node.copy_value));
+
+        header.append(main, actions);
+        return header;
+      }
+
+      function copyButtonFor(label, value) {
+        const button = document.createElement("button");
+        button.className = "copy-node";
+        button.type = "button";
+        button.textContent = `Copy ${label}`;
+        button.dataset.copy = value;
+        return button;
+      }
     </script>
   </body>
 </html>

@@ -435,6 +435,130 @@ button:focus-visible {
   font-weight: 700;
 }
 
+.json-tree {
+  display: grid;
+  gap: 8px;
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid #d7dfdf;
+  border-radius: 8px;
+  background: #fbfcf8;
+  padding: 10px;
+  margin-bottom: 14px;
+}
+
+.json-node {
+  border: 1px solid #d8e1dd;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.json-node summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.json-node summary::marker {
+  color: var(--accent);
+}
+
+.json-leaf {
+  padding: 0;
+}
+
+.json-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+}
+
+.json-node-main {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.json-path {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.json-preview {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.type-badge {
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.type-object {
+  background: #306998;
+}
+
+.type-array {
+  background: #6b5fb5;
+}
+
+.type-string {
+  background: #24755b;
+}
+
+.type-number {
+  background: #9a5f1e;
+}
+
+.type-boolean {
+  background: #8b4f8f;
+}
+
+.type-null {
+  background: #687380;
+}
+
+.json-node-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.copy-node {
+  border: 1px solid #c9d2d6;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 5px 7px;
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.copy-node:hover {
+  background: #eef4f8;
+}
+
+.json-children {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid #edf0ec;
+  margin-left: 16px;
+  padding: 8px;
+}
+
 pre,
 code {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
