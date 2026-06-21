@@ -48,6 +48,7 @@
               </label>
               <label class="check"><input id="sortKeys" type="checkbox" checked /> Sort keys</label>
               <label class="check"><input id="minify" type="checkbox" /> Minify</label>
+              <label class="check"><input id="allowJsonc" type="checkbox" /> JSONC</label>
             </div>
           </div>
         </div>
@@ -121,6 +122,7 @@
             source: sourceEl.value,
             indent: Number(document.querySelector("#indent").value),
             sort_keys: document.querySelector("#sortKeys").checked,
+            allow_jsonc: document.querySelector("#allowJsonc").checked,
           });
 
           if (!result.ok) {
@@ -153,9 +155,11 @@
           indent: Number(document.querySelector("#indent").value),
           sort_keys: document.querySelector("#sortKeys").checked,
           minify: document.querySelector("#minify").checked,
+          allow_jsonc: document.querySelector("#allowJsonc").checked,
         });
         const analysis = await callPythonJson(pyodide, "analyze_json", {
           source,
+          allow_jsonc: document.querySelector("#allowJsonc").checked,
         });
 
         if (!result.ok) {

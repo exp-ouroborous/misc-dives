@@ -90,6 +90,96 @@ def _json_error_response(exc, **extra):
     return response
 
 
+def _strip_jsonc_comments(source):
+    output = []
+    i = 0
+    in_string = False
+    escaped = False
+
+    while i < len(source):
+        char = source[i]
+        next_char = source[i + 1] if i + 1 < len(source) else ""
+
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            output.append(char)
+            i += 1
+            continue
+
+        if char == "/" and next_char == "/":
+            output.extend("  ")
+            i += 2
+            while i < len(source) and source[i] != "\n":
+                output.append(" ")
+                i += 1
+            continue
+
+        if char == "/" and next_char == "*":
+            output.extend("  ")
+            i += 2
+            while i < len(source):
+                if source[i] == "*" and i + 1 < len(source) and source[i + 1] == "/":
+                    output.extend("  ")
+                    i += 2
+                    break
+                output.append("\n" if source[i] == "\n" else " ")
+                i += 1
+            continue
+
+        output.append(char)
+        i += 1
+
+    return "".join(output)
+
+
+def _remove_jsonc_trailing_commas(source):
+    chars = list(source)
+    i = 0
+    in_string = False
+    escaped = False
+
+    while i < len(chars):
+        char = chars[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "," and _next_significant(source, i + 1) in "}]":
+            chars[i] = " "
+        i += 1
+
+    return "".join(chars)
+
+
+def _json_source(source, allow_jsonc=False):
+    if not allow_jsonc:
+        return source
+    return _remove_jsonc_trailing_commas(_strip_jsonc_comments(source))
+
+
+def _loads_json(source, allow_jsonc=False):
+    return json.loads(_json_source(source, allow_jsonc))
+
+
 def _append_missing_closers(source):
     stack = []
     in_string = False
@@ -245,9 +335,9 @@ def _quote_bare_values(source):
     return "".join(output), repairs
 
 
-def format_json(source, indent=2, sort_keys=False, minify=False):
+def format_json(source, indent=2, sort_keys=False, minify=False, allow_jsonc=False):
     try:
-        parsed = json.loads(source)
+        parsed = _loads_json(source, allow_jsonc)
     except json.JSONDecodeError as exc:
         return _json_error_response(exc)
 
@@ -265,12 +355,12 @@ def format_json(source, indent=2, sort_keys=False, minify=False):
     }
 
 
-def heal_json(source, indent=2, sort_keys=True):
+def heal_json(source, indent=2, sort_keys=True, allow_jsonc=False):
     repairs = []
     try:
-        parsed = json.loads(source)
+        parsed = _loads_json(source, allow_jsonc)
     except json.JSONDecodeError as original_error:
-        repaired, closer_repairs, balanced = _append_missing_closers(source)
+        repaired, closer_repairs, balanced = _append_missing_closers(_json_source(source, allow_jsonc))
         if not balanced:
             return _json_error_response(original_error, repairs=[], repaired=False)
         repairs.extend(closer_repairs)
@@ -299,9 +389,9 @@ def heal_json(source, indent=2, sort_keys=True):
     }
 
 
-def analyze_json(source):
+def analyze_json(source, allow_jsonc=False):
     try:
-        parsed = json.loads(source)
+        parsed = _loads_json(source, allow_jsonc)
     except json.JSONDecodeError as exc:
         return {
             "ok": False,

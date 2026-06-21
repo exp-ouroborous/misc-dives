@@ -89,6 +89,28 @@ class JsonToolTests(unittest.TestCase):
         self.assertEqual(result["line"], 1)
         self.assertGreater(result["column"], 0)
 
+    def test_formats_jsonc_when_enabled(self):
+        tool = load_tool("json-pretty-printer")
+        source = """
+        {
+          // user-facing label
+          "name": "Ada",
+          "skills": [
+            "math",
+          ],
+          /* keep boolean values intact */
+          "active": true,
+        }
+        """
+
+        result = tool.format_json(source, indent=2, sort_keys=True, minify=False, allow_jsonc=True)
+        analysis = tool.analyze_json(source, allow_jsonc=True)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada",\n  "skills": [\n    "math"\n  ]\n}')
+        self.assertTrue(analysis["ok"])
+        self.assertEqual(analysis["summary"]["root_type"], "object")
+
     def test_analyzes_tree_paths_for_explorer(self):
         tool = load_tool("json-pretty-printer")
 
@@ -131,7 +153,9 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn('id="jsonBanner"', page)
         self.assertIn('id="jsonTree"', page)
         self.assertIn('id="heal"', page)
+        self.assertIn('id="allowJsonc"', page)
         self.assertIn("healJson", page)
+        self.assertIn("allow_jsonc", page)
         self.assertIn("renderJsonTree", page)
         self.assertIn("copy-node", page)
         self.assertLess(page.index('id="output"'), page.index('id="jsonTree"'))
