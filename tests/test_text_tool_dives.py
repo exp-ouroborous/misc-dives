@@ -229,8 +229,11 @@ class TextDiffToolTests(unittest.TestCase):
 
         self.assertIn('id="visualDiff"', page)
         self.assertIn("renderVisualDiff", page)
+        self.assertIn("formatRowsForCopy", page)
         self.assertIn("diff-cell-left", page)
         self.assertIn("diff-cell-right", page)
+        self.assertNotIn('id="output"', page)
+        self.assertNotIn("Unified diff", page)
 
     def test_text_diff_page_has_file_loaders(self):
         page = (ROOT / "dives" / "text-diff" / "index.html").read_text()

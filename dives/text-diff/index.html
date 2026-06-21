@@ -19,7 +19,7 @@
         <h1 class="brand-title">Text Diff</h1>
       </div>
       <p class="intro">
-        Compare two text blocks with Python's `difflib` and inspect a unified diff
+        Compare two text blocks with Python's `difflib` in a side-by-side browser view
         without installing a command-line tool.
       </p>
 
@@ -78,8 +78,6 @@ delta
           <div id="visualDiff" class="visual-diff" aria-live="polite">
             <div class="match-empty">Build the sample diff to see a side-by-side view.</div>
           </div>
-          <div class="field-label raw-diff-label">Unified diff</div>
-          <pre id="output" class="output">Build the sample diff to see output.</pre>
         </div>
       </section>
     </main>
@@ -88,7 +86,6 @@ delta
       import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
 
       const statusEl = document.querySelector("#status");
-      const outputEl = document.querySelector("#output");
       const visualDiffEl = document.querySelector("#visualDiff");
       const runButton = document.querySelector("#run");
       const copyButton = document.querySelector("#copy");
@@ -118,12 +115,11 @@ delta
           setText(document.querySelector("#removed"), result.removed);
           setText(document.querySelector("#changed"), result.changed);
           renderVisualDiff(result.rows);
-          latestOutput = result.diff || "No differences.";
-          setText(outputEl, latestOutput);
+          latestOutput = formatRowsForCopy(result.rows, result);
         } catch (error) {
           setStatus(statusEl, "Runtime error", "error");
           latestOutput = error.message;
-          setText(outputEl, error.stack || error.message);
+          renderVisualMessage(error.stack || error.message);
         } finally {
           runButton.disabled = false;
         }
@@ -131,7 +127,8 @@ delta
 
       pyodideReady = init().catch((error) => {
         setStatus(statusEl, "Pyodide failed", "error");
-        setText(outputEl, error.stack || error.message);
+        latestOutput = error.message;
+        renderVisualMessage(error.stack || error.message);
         throw error;
       });
 
@@ -185,6 +182,32 @@ delta
           );
           visualDiffEl.append(rowEl);
         }
+      }
+
+      function renderVisualMessage(message) {
+        visualDiffEl.replaceChildren();
+        const empty = document.createElement("div");
+        empty.className = "match-empty";
+        empty.textContent = message;
+        visualDiffEl.append(empty);
+      }
+
+      function formatRowsForCopy(rows, result) {
+        if (!rows || rows.length === 0 || (result.added === 0 && result.removed === 0)) {
+          return "No differences.";
+        }
+
+        const leftLabel = document.querySelector("#fromLabel").value || "left";
+        const rightLabel = document.querySelector("#toLabel").value || "right";
+        const lines = [`${leftLabel}\t${rightLabel}`];
+        for (const row of rows) {
+          const leftNumber = row.left_line ?? "";
+          const rightNumber = row.right_line ?? "";
+          const leftText = row.left_text || "";
+          const rightText = row.right_text || "";
+          lines.push(`${leftNumber} ${leftText}\t${rightNumber} ${rightText}`.trimEnd());
+        }
+        return lines.join("\n");
       }
 
       function diffHeaderCell(label) {
