@@ -361,16 +361,6 @@ button:focus-visible {
   font-weight: 800;
 }
 
-.match-chars {
-  display: block;
-  border-radius: 7px;
-  background: #17202a;
-  color: #f5fbff;
-  padding: 9px 10px;
-  overflow-wrap: anywhere;
-  font-size: 0.95rem;
-}
-
 .match-context {
   display: grid;
   gap: 5px;
@@ -400,7 +390,7 @@ button:focus-visible {
 
 .match-context-line mark {
   border-radius: 5px;
-  background: #ffe27a;
+  background: #b8f3c3;
   color: #17202a;
   padding: 2px 3px;
   box-decoration-break: clone;

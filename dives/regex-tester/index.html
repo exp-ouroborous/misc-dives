@@ -220,10 +220,6 @@
 
           header.append(title, span);
 
-          const chars = document.createElement("code");
-          chars.className = "match-chars";
-          chars.textContent = match.match;
-
           const context = renderMatchContext(sourceText, match.start, match.end);
 
           const groups = document.createElement("div");
@@ -244,7 +240,7 @@
             }
           }
 
-          card.append(header, context, chars, groups);
+          card.append(header, context, groups);
           list.append(card);
         }
       }
