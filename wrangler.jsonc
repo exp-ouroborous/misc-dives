@@ -1,0 +1,10 @@
+{
+  // Cloudflare Pages config for the misc-dives static site.
+  // The site is the `dives/` directory: each dive is served at /<slug>/ (e.g.
+  // /regex-tester/) and the shared files at /assets/. No build step.
+  // Surfaced same-origin by words-for-the-unwise under /learn/<slug>/ via its
+  // Astro middleware reverse-proxy — see DEPLOY.md.
+  "name": "misc-dives",
+  "pages_build_output_dir": "dives",
+  "compatibility_date": "2026-06-20"
+}
