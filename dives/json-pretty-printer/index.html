@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSON Pretty Printer · misc-dives</title>
+    <link rel="stylesheet" href="../assets/dive.css" />
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="../">Back to dives</a>
+        <div id="status" class="status">Idle</div>
+      </div>
+
+      <div class="brand">
+        <div class="brand-mark">js</div>
+        <h1 class="brand-title">JSON Pretty Printer</h1>
+      </div>
+      <p class="intro">
+        Parse, validate, sort, pretty-print, or minify JSON through Python's stdlib
+        JSON module running inside Pyodide.
+      </p>
+
+      <section class="tool-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Input</h2>
+            <button id="run" class="button" type="button">Format JSON</button>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label for="source">JSON</label>
+              <textarea id="source">{"z":2,"a":{"b":1}}</textarea>
+            </div>
+            <div class="controls">
+              <label class="check">
+                Indent
+                <select id="indent">
+                  <option value="2" selected>2</option>
+                  <option value="4">4</option>
+                  <option value="8">8</option>
+                </select>
+              </label>
+              <label class="check"><input id="sortKeys" type="checkbox" checked /> Sort keys</label>
+              <label class="check"><input id="minify" type="checkbox" /> Minify</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Output</h2>
+            <button id="copy" class="button secondary" type="button">Copy</button>
+          </div>
+          <div class="panel-body">
+            <pre id="output" class="output">Format the sample to see validated JSON.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+
+      const statusEl = document.querySelector("#status");
+      const outputEl = document.querySelector("#output");
+      const runButton = document.querySelector("#run");
+      const copyButton = document.querySelector("#copy");
+      let pyodideReady;
+      let latestOutput = "";
+
+      async function init() {
+        const pyodide = await getPyodide(statusEl);
+        await loadPythonFile(pyodide, "tool.py");
+        return pyodide;
+      }
+
+      async function run() {
+        runButton.disabled = true;
+        setStatus(statusEl, "Formatting JSON...", "loading");
+        try {
+          const pyodide = await pyodideReady;
+          const result = await callPythonJson(pyodide, "format_json", {
+            source: document.querySelector("#source").value,
+            indent: Number(document.querySelector("#indent").value),
+            sort_keys: document.querySelector("#sortKeys").checked,
+            minify: document.querySelector("#minify").checked,
+          });
+
+          if (!result.ok) {
+            setStatus(statusEl, `Invalid JSON at ${result.line}:${result.column}`, "error");
+            latestOutput = `${result.error}\nline ${result.line}, column ${result.column}`;
+          } else {
+            setStatus(statusEl, "JSON valid", "ready");
+            latestOutput = result.output;
+          }
+          setText(outputEl, latestOutput);
+        } catch (error) {
+          setStatus(statusEl, "Runtime error", "error");
+          latestOutput = error.message;
+          setText(outputEl, error.stack || error.message);
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      pyodideReady = init().catch((error) => {
+        setStatus(statusEl, "Pyodide failed", "error");
+        setText(outputEl, error.stack || error.message);
+        throw error;
+      });
+
+      runButton.addEventListener("click", run);
+      copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+    </script>
+  </body>
+</html>

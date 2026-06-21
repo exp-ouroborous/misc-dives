@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Regex Tester · misc-dives</title>
+    <link rel="stylesheet" href="../assets/dive.css" />
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="../">Back to dives</a>
+        <div id="status" class="status">Idle</div>
+      </div>
+
+      <div class="brand">
+        <div class="brand-mark">re</div>
+        <h1 class="brand-title">Regex Tester</h1>
+      </div>
+      <p class="intro">
+        Run Python regular expressions in the browser. Inspect matches, spans, groups, flags,
+        and a substitution preview without sending text anywhere.
+      </p>
+
+      <section class="tool-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Input</h2>
+            <button id="run" class="button" type="button">Run regex</button>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label for="pattern">Pattern</label>
+              <input id="pattern" value="(?P&lt;word&gt;\b\w{4}\b)" />
+            </div>
+            <div class="field">
+              <label for="text">Text</label>
+              <textarea id="text">time code test go</textarea>
+            </div>
+            <div class="field">
+              <label for="replacement">Replacement preview</label>
+              <input id="replacement" value="[$word]" />
+              <p class="hint">Use <code>$name</code> or <code>$1</code> placeholders for groups.</p>
+            </div>
+            <div class="controls" aria-label="Regex flags">
+              <label class="check"><input id="ignorecase" type="checkbox" /> Ignore case</label>
+              <label class="check"><input id="multiline" type="checkbox" /> Multiline</label>
+              <label class="check"><input id="dotall" type="checkbox" /> Dot matches newline</label>
+              <label class="check"><input id="ascii" type="checkbox" /> ASCII</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Output</h2>
+            <button id="copy" class="button secondary" type="button">Copy</button>
+          </div>
+          <div class="panel-body">
+            <div class="summary">
+              <div class="metric"><b id="matchCount">0</b><span>matches</span></div>
+              <div class="metric"><b id="groupCount">0</b><span>groups</span></div>
+              <div class="metric"><b id="spanCount">0</b><span>spans</span></div>
+            </div>
+            <pre id="output" class="output">Run the sample to see Python re output.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { callPythonJson, copyText, getPyodide, loadPythonFile, pretty, setStatus, setText } from "../assets/pyodide-tools.js";
+
+      const statusEl = document.querySelector("#status");
+      const outputEl = document.querySelector("#output");
+      const runButton = document.querySelector("#run");
+      const copyButton = document.querySelector("#copy");
+      let pyodideReady;
+      let latestOutput = "";
+
+      async function init() {
+        const pyodide = await getPyodide(statusEl);
+        await loadPythonFile(pyodide, "tool.py");
+        return pyodide;
+      }
+
+      function selectedFlags() {
+        return ["ignorecase", "multiline", "dotall", "ascii"].filter((id) => document.querySelector(`#${id}`).checked);
+      }
+
+      function render(result) {
+        if (!result.ok) {
+          setStatus(statusEl, "Regex error", "error");
+          latestOutput = result.error;
+          setText(outputEl, result.error);
+          return;
+        }
+
+        setStatus(statusEl, "Regex complete", "ready");
+        const groups = result.matches.reduce((count, match) => count + Object.keys(match.groups).length + match.numbered_groups.length, 0);
+        setText(document.querySelector("#matchCount"), result.match_count);
+        setText(document.querySelector("#groupCount"), groups);
+        setText(document.querySelector("#spanCount"), result.matches.length);
+        latestOutput = pretty({
+          matches: result.matches,
+          substitution: result.substitution,
+        });
+        setText(outputEl, latestOutput);
+      }
+
+      async function run() {
+        runButton.disabled = true;
+        setStatus(statusEl, "Running regex...", "loading");
+        try {
+          const pyodide = await pyodideReady;
+          const result = await callPythonJson(pyodide, "analyze_regex", {
+            pattern: document.querySelector("#pattern").value,
+            text: document.querySelector("#text").value,
+            flags: selectedFlags(),
+            replacement: document.querySelector("#replacement").value,
+          });
+          render(result);
+        } catch (error) {
+          setStatus(statusEl, "Runtime error", "error");
+          latestOutput = error.message;
+          setText(outputEl, error.stack || error.message);
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      pyodideReady = init().catch((error) => {
+        setStatus(statusEl, "Pyodide failed", "error");
+        setText(outputEl, error.stack || error.message);
+        throw error;
+      });
+
+      runButton.addEventListener("click", run);
+      copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+    </script>
+  </body>
+</html>

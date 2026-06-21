@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Text Diff · misc-dives</title>
+    <link rel="stylesheet" href="../assets/dive.css" />
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="../">Back to dives</a>
+        <div id="status" class="status">Idle</div>
+      </div>
+
+      <div class="brand">
+        <div class="brand-mark">df</div>
+        <h1 class="brand-title">Text Diff</h1>
+      </div>
+      <p class="intro">
+        Compare two text blocks with Python's `difflib` and inspect a unified diff
+        without installing a command-line tool.
+      </p>
+
+      <section class="tool-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Left</h2>
+            <input id="fromLabel" value="left" aria-label="Left label" />
+          </div>
+          <div class="panel-body">
+            <textarea id="left">alpha
+beta
+gamma
+</textarea>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Right</h2>
+            <input id="toLabel" value="right" aria-label="Right label" />
+          </div>
+          <div class="panel-body">
+            <textarea id="right">alpha
+better
+gamma
+delta
+</textarea>
+          </div>
+        </div>
+      </section>
+
+      <div class="controls">
+        <button id="run" class="button" type="button">Build diff</button>
+        <button id="copy" class="button secondary" type="button">Copy</button>
+      </div>
+
+      <section class="panel" style="margin-top: 18px;">
+        <div class="panel-header">
+          <h2 class="panel-title">Unified Diff</h2>
+        </div>
+        <div class="panel-body">
+          <div class="summary">
+            <div class="metric"><b id="added">0</b><span>added</span></div>
+            <div class="metric"><b id="removed">0</b><span>removed</span></div>
+            <div class="metric"><b id="changed">0</b><span>changed</span></div>
+          </div>
+          <pre id="output" class="output">Build the sample diff to see output.</pre>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+
+      const statusEl = document.querySelector("#status");
+      const outputEl = document.querySelector("#output");
+      const runButton = document.querySelector("#run");
+      const copyButton = document.querySelector("#copy");
+      let pyodideReady;
+      let latestOutput = "";
+
+      async function init() {
+        const pyodide = await getPyodide(statusEl);
+        await loadPythonFile(pyodide, "tool.py");
+        return pyodide;
+      }
+
+      async function run() {
+        runButton.disabled = true;
+        setStatus(statusEl, "Building diff...", "loading");
+        try {
+          const pyodide = await pyodideReady;
+          const result = await callPythonJson(pyodide, "build_diff", {
+            left: document.querySelector("#left").value,
+            right: document.querySelector("#right").value,
+            from_label: document.querySelector("#fromLabel").value,
+            to_label: document.querySelector("#toLabel").value,
+          });
+
+          setStatus(statusEl, "Diff complete", "ready");
+          setText(document.querySelector("#added"), result.added);
+          setText(document.querySelector("#removed"), result.removed);
+          setText(document.querySelector("#changed"), result.changed);
+          latestOutput = result.diff || "No differences.";
+          setText(outputEl, latestOutput);
+        } catch (error) {
+          setStatus(statusEl, "Runtime error", "error");
+          latestOutput = error.message;
+          setText(outputEl, error.stack || error.message);
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      pyodideReady = init().catch((error) => {
+        setStatus(statusEl, "Pyodide failed", "error");
+        setText(outputEl, error.stack || error.message);
+        throw error;
+      });
+
+      runButton.addEventListener("click", run);
+      copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+    </script>
+  </body>
+</html>

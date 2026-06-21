@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Markdown To HTML · misc-dives</title>
+    <link rel="stylesheet" href="../assets/dive.css" />
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <div class="topbar">
+        <a class="back-link" href="../">Back to dives</a>
+        <div id="status" class="status">Idle</div>
+      </div>
+
+      <div class="brand">
+        <div class="brand-mark">md</div>
+        <h1 class="brand-title">Markdown To HTML</h1>
+      </div>
+      <p class="intro">
+        Load the real Python `markdown` package with Pyodide and `micropip`, then
+        convert Markdown to HTML entirely in the browser.
+      </p>
+
+      <section class="tool-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Markdown</h2>
+            <button id="run" class="button" type="button">Convert</button>
+          </div>
+          <div class="panel-body">
+            <textarea id="source"># Hello
+
+| a | b |
+| - | - |
+| 1 | 2 |
+</textarea>
+            <div class="controls">
+              <label class="check"><input id="extra" type="checkbox" checked /> extra</label>
+              <label class="check"><input id="tables" type="checkbox" checked /> tables</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">HTML Source</h2>
+            <button id="copy" class="button secondary" type="button">Copy</button>
+          </div>
+          <div class="panel-body">
+            <pre id="output" class="output">Install the Markdown package, then convert the sample.</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top: 18px;">
+        <div class="panel-header">
+          <h2 class="panel-title">Preview</h2>
+        </div>
+        <div class="panel-body">
+          <iframe id="preview" class="preview-frame" title="Markdown preview" sandbox=""></iframe>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+
+      const statusEl = document.querySelector("#status");
+      const outputEl = document.querySelector("#output");
+      const previewEl = document.querySelector("#preview");
+      const runButton = document.querySelector("#run");
+      const copyButton = document.querySelector("#copy");
+      let pyodideReady;
+      let latestOutput = "";
+
+      async function init() {
+        const pyodide = await getPyodide(statusEl);
+        setStatus(statusEl, "Loading micropip...", "loading");
+        await pyodide.loadPackage("micropip");
+        setStatus(statusEl, "Installing markdown...", "loading");
+        await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("markdown")
+`);
+        await loadPythonFile(pyodide, "tool.py");
+        setStatus(statusEl, "Markdown ready", "ready");
+        return pyodide;
+      }
+
+      async function run() {
+        runButton.disabled = true;
+        setStatus(statusEl, "Converting Markdown...", "loading");
+        try {
+          const pyodide = await pyodideReady;
+          const extensions = await callPythonJson(pyodide, "build_extensions", {
+            extra: document.querySelector("#extra").checked,
+            tables: document.querySelector("#tables").checked,
+          });
+          const result = await callPythonJson(pyodide, "convert_markdown", {
+            source: document.querySelector("#source").value,
+            extensions,
+          });
+
+          if (!result.ok) {
+            setStatus(statusEl, "Markdown error", "error");
+            latestOutput = result.error;
+            setText(outputEl, latestOutput);
+            previewEl.srcdoc = "";
+            return;
+          }
+
+          setStatus(statusEl, "Conversion complete", "ready");
+          latestOutput = result.html;
+          setText(outputEl, latestOutput);
+          previewEl.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px/1.55 system-ui,sans-serif;padding:20px;color:#17202a}table{border-collapse:collapse}td,th{border:1px solid #c9d2d6;padding:6px 9px}</style></head><body>${result.html}</body></html>`;
+        } catch (error) {
+          setStatus(statusEl, "Runtime error", "error");
+          latestOutput = error.message;
+          setText(outputEl, error.stack || error.message);
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      pyodideReady = init().catch((error) => {
+        setStatus(statusEl, "Package load failed", "error");
+        setText(outputEl, error.stack || error.message);
+        throw error;
+      });
+
+      runButton.addEventListener("click", run);
+      copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+    </script>
+  </body>
+</html>
