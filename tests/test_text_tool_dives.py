@@ -208,6 +208,37 @@ class TextDiffToolTests(unittest.TestCase):
         self.assertEqual(result["added"], 2)
         self.assertEqual(result["removed"], 1)
 
+    def test_builds_side_by_side_rows(self):
+        tool = load_tool("text-diff")
+
+        result = tool.build_diff("alpha\nbeta\ngamma\n", "alpha\nbetter\ngamma\ndelta\n")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["rows"],
+            [
+                {"kind": "equal", "left_line": 1, "left_text": "alpha", "right_line": 1, "right_text": "alpha"},
+                {"kind": "replace", "left_line": 2, "left_text": "beta", "right_line": 2, "right_text": "better"},
+                {"kind": "equal", "left_line": 3, "left_text": "gamma", "right_line": 3, "right_text": "gamma"},
+                {"kind": "insert", "left_line": None, "left_text": "", "right_line": 4, "right_text": "delta"},
+            ],
+        )
+
+    def test_text_diff_page_has_visual_diff_region(self):
+        page = (ROOT / "dives" / "text-diff" / "index.html").read_text()
+
+        self.assertIn('id="visualDiff"', page)
+        self.assertIn("renderVisualDiff", page)
+        self.assertIn("diff-cell-left", page)
+        self.assertIn("diff-cell-right", page)
+
+    def test_text_diff_page_has_file_loaders(self):
+        page = (ROOT / "dives" / "text-diff" / "index.html").read_text()
+
+        self.assertIn('id="leftFile"', page)
+        self.assertIn('id="rightFile"', page)
+        self.assertIn("loadFileIntoPane", page)
+
 
 class MarkdownToolTests(unittest.TestCase):
     def test_builds_extensions_without_duplicates(self):

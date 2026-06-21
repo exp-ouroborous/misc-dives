@@ -157,6 +157,23 @@ a {
   justify-content: flex-end;
 }
 
+.panel-actions input:not(.file-input) {
+  width: min(160px, 36vw);
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-button {
+  min-height: 40px;
+}
+
 .panel-body {
   padding: 16px;
 }
@@ -647,6 +664,86 @@ pre.output {
   border-radius: 3px;
   background: lightgreen;
   box-shadow: 0 0 0 1px rgba(32, 125, 73, 0.2);
+}
+
+.visual-diff {
+  max-height: 460px;
+  margin-bottom: 14px;
+  overflow: auto;
+  border: 1px solid #d7dfdf;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  min-width: 720px;
+  border-bottom: 1px solid #edf0ec;
+}
+
+.diff-row:last-child {
+  border-bottom: 0;
+}
+
+.diff-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f8f8;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diff-cell {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  min-height: 34px;
+  border-right: 1px solid #edf0ec;
+  align-items: stretch;
+}
+
+.diff-cell:last-child {
+  border-right: 0;
+}
+
+.diff-line-number {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  border-right: 1px solid rgba(87, 102, 104, 0.18);
+  color: #778486;
+  padding: 6px 8px;
+  user-select: none;
+}
+
+.diff-line-text {
+  min-width: 0;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.diff-row[data-kind="delete"] .diff-cell-left,
+.diff-row[data-kind="replace"] .diff-cell-left {
+  background: #ffe9e7;
+}
+
+.diff-row[data-kind="insert"] .diff-cell-right,
+.diff-row[data-kind="replace"] .diff-cell-right {
+  background: #e5f8eb;
+}
+
+.diff-row[data-kind="delete"] .diff-cell-right,
+.diff-row[data-kind="insert"] .diff-cell-left {
+  background: #f7f8f6;
+}
+
+.raw-diff-label {
+  margin: 14px 0 7px;
 }
 
 .error-text {
