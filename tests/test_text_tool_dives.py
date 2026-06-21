@@ -28,7 +28,30 @@ class RegexToolTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["match_count"], 3)
         self.assertEqual(result["matches"][0]["groups"]["word"], "time")
+        self.assertEqual(
+            result["matches"][0]["group_spans"],
+            [
+                {
+                    "number": 1,
+                    "name": "word",
+                    "text": "time",
+                    "start": 0,
+                    "end": 4,
+                    "matched": True,
+                }
+            ],
+        )
         self.assertEqual(result["substitution"], "[time] [code] [test] go")
+        self.assertFalse(result["full_match"])
+
+    def test_reports_full_string_match(self):
+        tool = load_tool("regex-tester")
+
+        result = tool.analyze_regex(r"\w{4}", "time", [], "")
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["full_match"])
+        self.assertEqual(result["full_match_span"], [0, 4])
 
     def test_reports_regex_errors(self):
         tool = load_tool("regex-tester")
