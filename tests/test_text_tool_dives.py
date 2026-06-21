@@ -251,6 +251,40 @@ class MarkdownToolTests(unittest.TestCase):
         self.assertEqual(tool.build_extensions(True, False), ["extra"])
         self.assertEqual(tool.build_extensions(False, True), ["tables"])
 
+    def test_builds_expanded_extension_set(self):
+        tool = load_tool("markdown-to-html")
+
+        result = tool.build_extensions(
+            extra=False,
+            tables=True,
+            fenced_code=True,
+            footnotes=True,
+            toc=True,
+            sane_lists=True,
+            smarty=True,
+            nl2br=True,
+        )
+
+        self.assertEqual(result, ["tables", "fenced_code", "footnotes", "toc", "sane_lists", "smarty", "nl2br"])
+
+    def test_sanitize_reports_missing_bleach_package(self):
+        tool = load_tool("markdown-to-html")
+        try:
+            import markdown  # noqa: F401
+        except ImportError:
+            self.skipTest("Python markdown package is not installed in local CPython")
+
+        result = tool.convert_markdown("<script>alert(1)</script>", ["extra"], sanitize=True)
+
+        try:
+            import bleach  # noqa: F401
+        except ImportError:
+            self.assertFalse(result["ok"])
+            self.assertIn("bleach", result["error"].lower())
+        else:
+            self.assertTrue(result["ok"])
+            self.assertNotIn("<script>", result["html"])
+
     def test_converts_markdown_when_package_is_available(self):
         tool = load_tool("markdown-to-html")
         try:
@@ -262,6 +296,32 @@ class MarkdownToolTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertIn("<h1>Hello</h1>", result["html"])
+
+    def test_markdown_page_has_upgrade_controls(self):
+        page = (ROOT / "dives" / "markdown-to-html" / "index.html").read_text()
+
+        for control_id in [
+            "markdownFile",
+            "fencedCode",
+            "footnotes",
+            "toc",
+            "saneLists",
+            "smarty",
+            "nl2br",
+            "sanitize",
+            "tabPreview",
+            "tabHtml",
+            "tabNotes",
+            "copyHtml",
+            "copyText",
+            "copyDocument",
+        ]:
+            self.assertIn(f'id="{control_id}"', page)
+
+        self.assertIn("loadMarkdownFile", page)
+        self.assertIn("activateTab", page)
+        self.assertIn("copyPlainText", page)
+        self.assertIn("copyFullDocument", page)
 
 
 class DiveIndexTests(unittest.TestCase):

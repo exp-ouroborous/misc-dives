@@ -19,47 +19,81 @@
         <h1 class="brand-title">Markdown To HTML</h1>
       </div>
       <p class="intro">
-        Load the real Python `markdown` package with Pyodide and `micropip`, then
-        convert Markdown to HTML entirely in the browser.
+        Load real Python packages with Pyodide and `micropip`, then convert Markdown
+        to HTML entirely in the browser.
       </p>
 
       <section class="tool-grid">
         <div class="panel">
           <div class="panel-header">
             <h2 class="panel-title">Markdown</h2>
-            <button id="run" class="button" type="button">Convert</button>
+            <div class="panel-actions">
+              <label class="button secondary file-button" for="markdownFile">Load .md</label>
+              <input id="markdownFile" class="file-input" type="file" accept=".md,.markdown,text/markdown,text/plain" />
+              <button id="run" class="button" type="button">Convert</button>
+            </div>
           </div>
           <div class="panel-body">
             <textarea id="source"># Hello
 
+```python
+print("hello from markdown")
+```
+
 | a | b |
 | - | - |
 | 1 | 2 |
+
+Raw HTML: <strong>allowed unless sanitized</strong>
 </textarea>
-            <div class="controls">
+            <div class="controls extension-controls">
               <label class="check"><input id="extra" type="checkbox" checked /> extra</label>
               <label class="check"><input id="tables" type="checkbox" checked /> tables</label>
+              <label class="check"><input id="fencedCode" type="checkbox" checked /> fenced code</label>
+              <label class="check"><input id="footnotes" type="checkbox" /> footnotes</label>
+              <label class="check"><input id="toc" type="checkbox" /> toc</label>
+              <label class="check"><input id="saneLists" type="checkbox" /> sane lists</label>
+              <label class="check"><input id="smarty" type="checkbox" /> smarty</label>
+              <label class="check"><input id="nl2br" type="checkbox" /> nl2br</label>
+              <label class="check"><input id="sanitize" type="checkbox" /> sanitize HTML</label>
             </div>
           </div>
         </div>
 
         <div class="panel">
           <div class="panel-header">
-            <h2 class="panel-title">HTML Source</h2>
-            <button id="copy" class="button secondary" type="button">Copy</button>
+            <h2 class="panel-title">Output</h2>
+            <div class="panel-actions">
+              <button id="copyHtml" class="button secondary" type="button">Copy HTML</button>
+              <button id="copyText" class="button secondary" type="button">Copy text</button>
+              <button id="copyDocument" class="button secondary" type="button">Copy doc</button>
+            </div>
           </div>
           <div class="panel-body">
-            <pre id="output" class="output">Install the Markdown package, then convert the sample.</pre>
-          </div>
-        </div>
-      </section>
+            <div class="tabs" role="tablist" aria-label="Markdown output">
+              <button id="tabPreview" class="tab-button" type="button" role="tab" aria-selected="true" data-tab="previewPane">Preview</button>
+              <button id="tabHtml" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="htmlPane">HTML</button>
+              <button id="tabNotes" class="tab-button" type="button" role="tab" aria-selected="false" data-tab="notesPane">Notes</button>
+            </div>
 
-      <section class="panel" style="margin-top: 18px;">
-        <div class="panel-header">
-          <h2 class="panel-title">Preview</h2>
-        </div>
-        <div class="panel-body">
-          <iframe id="preview" class="preview-frame" title="Markdown preview" sandbox=""></iframe>
+            <div id="previewPane" class="tab-panel" role="tabpanel" aria-labelledby="tabPreview">
+              <iframe id="preview" class="preview-frame" title="Markdown preview" sandbox=""></iframe>
+            </div>
+
+            <div id="htmlPane" class="tab-panel" role="tabpanel" aria-labelledby="tabHtml" hidden>
+              <pre id="output" class="output">Install the Markdown package, then convert the sample.</pre>
+            </div>
+
+            <div id="notesPane" class="tab-panel" role="tabpanel" aria-labelledby="tabNotes" hidden>
+              <div class="notes-list">
+                <div class="note-item"><b>Not GitHub Markdown.</b><span>Python-Markdown is not a CommonMark or full GFM parser.</span></div>
+                <div class="note-item"><b>Raw HTML risk.</b><span>Unsanitized output can contain HTML from the input Markdown.</span></div>
+                <div class="note-item"><b>Browser install.</b><span>`markdown` is installed in Pyodide with `micropip`; `bleach` is used only for sanitizing.</span></div>
+                <div class="note-item"><b>Extensions matter.</b><span>Tables, footnotes, fenced code, TOC, and line breaks depend on selected extensions.</span></div>
+                <div id="packageNotes" class="note-item"><b>Package status.</b><span>Waiting for Pyodide.</span></div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -71,9 +105,11 @@
       const outputEl = document.querySelector("#output");
       const previewEl = document.querySelector("#preview");
       const runButton = document.querySelector("#run");
-      const copyButton = document.querySelector("#copy");
       let pyodideReady;
-      let latestOutput = "";
+      let latestHtml = "";
+      let latestDocument = "";
+      let latestText = "";
+      let bleachInstallError = "";
 
       async function init() {
         const pyodide = await getPyodide(statusEl);
@@ -84,6 +120,17 @@
 import micropip
 await micropip.install("markdown")
 `);
+        setPackageNote("Markdown installed. Installing bleach for optional sanitizing...");
+        try {
+          await pyodide.runPythonAsync(`
+import micropip
+await micropip.install("bleach")
+`);
+          setPackageNote("Markdown and bleach are installed.");
+        } catch (error) {
+          bleachInstallError = error.message;
+          setPackageNote("Markdown installed. Bleach is unavailable, so sanitize mode will report an error.");
+        }
         await loadPythonFile(pyodide, "tool.py");
         setStatus(statusEl, "Markdown ready", "ready");
         return pyodide;
@@ -97,28 +144,46 @@ await micropip.install("markdown")
           const extensions = await callPythonJson(pyodide, "build_extensions", {
             extra: document.querySelector("#extra").checked,
             tables: document.querySelector("#tables").checked,
+            fenced_code: document.querySelector("#fencedCode").checked,
+            footnotes: document.querySelector("#footnotes").checked,
+            toc: document.querySelector("#toc").checked,
+            sane_lists: document.querySelector("#saneLists").checked,
+            smarty: document.querySelector("#smarty").checked,
+            nl2br: document.querySelector("#nl2br").checked,
           });
           const result = await callPythonJson(pyodide, "convert_markdown", {
             source: document.querySelector("#source").value,
             extensions,
+            sanitize: document.querySelector("#sanitize").checked,
           });
 
           if (!result.ok) {
             setStatus(statusEl, "Markdown error", "error");
-            latestOutput = result.error;
-            setText(outputEl, latestOutput);
+            latestHtml = "";
+            latestDocument = "";
+            latestText = "";
+            setText(outputEl, result.error);
             previewEl.srcdoc = "";
+            setPackageNote(result.error);
+            activateTab("notesPane");
             return;
           }
 
-          setStatus(statusEl, "Conversion complete", "ready");
-          latestOutput = result.html;
-          setText(outputEl, latestOutput);
-          previewEl.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>body{font:16px/1.55 system-ui,sans-serif;padding:20px;color:#17202a}table{border-collapse:collapse}td,th{border:1px solid #c9d2d6;padding:6px 9px}</style></head><body>${result.html}</body></html>`;
+          setStatus(statusEl, result.sanitized ? "Sanitized HTML ready" : "Conversion complete", "ready");
+          latestHtml = result.html;
+          latestDocument = fullDocumentFor(result.html);
+          latestText = plainTextFor(result.html);
+          setText(outputEl, latestHtml);
+          previewEl.srcdoc = latestDocument;
+          setPackageNote(result.sanitized ? "Output sanitized with bleach." : packageStatusText());
         } catch (error) {
           setStatus(statusEl, "Runtime error", "error");
-          latestOutput = error.message;
+          latestHtml = "";
+          latestDocument = "";
+          latestText = "";
           setText(outputEl, error.stack || error.message);
+          setPackageNote(error.message);
+          activateTab("notesPane");
         } finally {
           runButton.disabled = false;
         }
@@ -127,11 +192,72 @@ await micropip.install("markdown")
       pyodideReady = init().catch((error) => {
         setStatus(statusEl, "Package load failed", "error");
         setText(outputEl, error.stack || error.message);
+        setPackageNote(error.message);
+        activateTab("notesPane");
         throw error;
       });
 
       runButton.addEventListener("click", run);
-      copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+      document.querySelector("#markdownFile").addEventListener("change", (event) => loadMarkdownFile(event.currentTarget));
+      document.querySelector("#copyHtml").addEventListener("click", () => copyText(latestHtml, statusEl));
+      document.querySelector("#copyText").addEventListener("click", () => copyPlainText());
+      document.querySelector("#copyDocument").addEventListener("click", () => copyFullDocument());
+      for (const tab of document.querySelectorAll(".tab-button")) {
+        tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+      }
+
+      async function loadMarkdownFile(fileInput) {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        setStatus(statusEl, "Loading Markdown file...", "loading");
+        try {
+          document.querySelector("#source").value = await file.text();
+          setStatus(statusEl, `Loaded ${file.name}`, "ready");
+        } catch (error) {
+          setStatus(statusEl, "File load failed", "error");
+        } finally {
+          fileInput.value = "";
+        }
+      }
+
+      function activateTab(panelId) {
+        for (const tab of document.querySelectorAll(".tab-button")) {
+          const active = tab.dataset.tab === panelId;
+          tab.setAttribute("aria-selected", active ? "true" : "false");
+        }
+        for (const panel of document.querySelectorAll(".tab-panel")) {
+          panel.hidden = panel.id !== panelId;
+        }
+      }
+
+      function copyPlainText() {
+        copyText(latestText, statusEl);
+      }
+
+      function copyFullDocument() {
+        copyText(latestDocument, statusEl);
+      }
+
+      function plainTextFor(html) {
+        return new DOMParser().parseFromString(html, "text/html").body.textContent || "";
+      }
+
+      function fullDocumentFor(html) {
+        return `<!doctype html><html><head><meta charset="utf-8"><style>${previewCss()}</style></head><body>${html}</body></html>`;
+      }
+
+      function previewCss() {
+        return "body{font:16px/1.55 system-ui,sans-serif;padding:20px;color:#17202a}table{border-collapse:collapse}td,th{border:1px solid #c9d2d6;padding:6px 9px}pre{background:#111820;color:#e9f0ef;padding:12px;border-radius:7px;overflow:auto}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}";
+      }
+
+      function packageStatusText() {
+        return bleachInstallError ? "Bleach is unavailable, so sanitize mode will report an error." : "Markdown and bleach are installed.";
+      }
+
+      function setPackageNote(message) {
+        const note = document.querySelector("#packageNotes span");
+        note.textContent = message;
+      }
     </script>
   </body>
 </html>
