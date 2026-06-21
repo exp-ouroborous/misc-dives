@@ -577,6 +577,11 @@ button:focus-visible {
   box-shadow: 0 8px 24px rgba(23, 32, 42, 0.18);
 }
 
+.copy-tooltip-below {
+  top: calc(100% + 7px);
+  bottom: auto;
+}
+
 .copy-node:hover .copy-tooltip,
 .copy-node:focus-visible .copy-tooltip {
   opacity: 1;

@@ -244,13 +244,14 @@
 
         const actions = document.createElement("div");
         actions.className = "json-node-actions";
-        actions.append(copyButtonFor("path", node.path), copyButtonFor("value", node.copy_value));
+        const tooltipPlacement = node.path === "$" ? "below" : "above";
+        actions.append(copyButtonFor("path", node.path, tooltipPlacement), copyButtonFor("value", node.copy_value, tooltipPlacement));
 
         header.append(main, actions);
         return header;
       }
 
-      function copyButtonFor(label, value) {
+      function copyButtonFor(label, value, tooltipPlacement = "above") {
         const button = document.createElement("button");
         button.className = "copy-node";
         button.type = "button";
@@ -259,7 +260,7 @@
         button.title = accessibleLabel;
         button.innerHTML = label === "path" ? pathIconSvg() : copyIconSvg();
         const tooltip = document.createElement("span");
-        tooltip.className = "copy-tooltip";
+        tooltip.className = tooltipPlacement === "below" ? "copy-tooltip copy-tooltip-below" : "copy-tooltip";
         tooltip.textContent = accessibleLabel;
         button.append(tooltip);
         button.dataset.copy = value;

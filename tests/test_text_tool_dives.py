@@ -117,6 +117,7 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn("pathIconSvg", page)
         self.assertIn("copyIconSvg", page)
         self.assertIn("copy-tooltip", page)
+        self.assertIn("copy-tooltip-below", page)
         self.assertNotIn("Copy Path", page)
         self.assertNotIn("Copy Value", page)
 
