@@ -102,7 +102,7 @@
           latestOutput = result.error;
           setText(outputEl, result.error);
           renderFullMatch(null);
-          renderMatchCards([]);
+          renderMatchCards([], "");
           return;
         }
 
@@ -113,7 +113,7 @@
         setText(document.querySelector("#spanCount"), result.matches.length);
         setText(document.querySelector("#fullMatch"), result.full_match ? "Yes" : "No");
         renderFullMatch(result);
-        renderMatchCards(result.matches);
+        renderMatchCards(result.matches, document.querySelector("#text").value);
         latestOutput = formatRegexOutput(result);
         setText(outputEl, latestOutput);
       }
@@ -192,7 +192,7 @@
         banner.append(label, value, detail);
       }
 
-      function renderMatchCards(matches) {
+      function renderMatchCards(matches, sourceText) {
         const list = document.querySelector("#matchList");
         list.replaceChildren();
 
@@ -224,6 +224,8 @@
           chars.className = "match-chars";
           chars.textContent = match.match;
 
+          const context = renderMatchContext(sourceText, match.start, match.end);
+
           const groups = document.createElement("div");
           groups.className = "group-list";
 
@@ -242,9 +244,55 @@
             }
           }
 
-          card.append(header, chars, groups);
+          card.append(header, context, chars, groups);
           list.append(card);
         }
+      }
+
+      function renderMatchContext(sourceText, start, end) {
+        const radius = 38;
+        const context = document.createElement("div");
+        context.className = "match-context";
+
+        const label = document.createElement("span");
+        label.className = "match-context-label";
+        label.textContent = "In context";
+
+        const line = document.createElement("code");
+        line.className = "match-context-line";
+
+        const leftStart = Math.max(0, start - radius);
+        const rightEnd = Math.min(sourceText.length, end + radius);
+        const hasLeftElision = leftStart > 0;
+        const hasRightElision = rightEnd < sourceText.length;
+
+        if (hasLeftElision) {
+          const elision = document.createElement("span");
+          elision.className = "context-elision";
+          elision.textContent = "...";
+          line.append(elision);
+        }
+
+        const before = document.createElement("span");
+        before.textContent = sourceText.slice(leftStart, start);
+
+        const mark = document.createElement("mark");
+        mark.textContent = sourceText.slice(start, end);
+
+        const after = document.createElement("span");
+        after.textContent = sourceText.slice(end, rightEnd);
+
+        line.append(before, mark, after);
+
+        if (hasRightElision) {
+          const elision = document.createElement("span");
+          elision.className = "context-elision";
+          elision.textContent = "...";
+          line.append(elision);
+        }
+
+        context.append(label, line);
+        return context;
       }
 
       async function run() {

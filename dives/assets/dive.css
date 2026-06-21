@@ -371,6 +371,48 @@ button:focus-visible {
   font-size: 0.95rem;
 }
 
+.match-context {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.match-context-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.match-context-line {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #d8e1dd;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  padding: 9px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.match-context-line mark {
+  border-radius: 5px;
+  background: #ffe27a;
+  color: #17202a;
+  padding: 2px 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 900;
+}
+
+.context-elision {
+  color: var(--muted);
+  font-weight: 900;
+}
+
 .group-list {
   display: flex;
   flex-wrap: wrap;

@@ -67,6 +67,7 @@ class RegexToolTests(unittest.TestCase):
         self.assertIn('id="fullMatchBanner"', page)
         self.assertIn('id="matchList"', page)
         self.assertIn("renderMatchCards", page)
+        self.assertIn("renderMatchContext", page)
 
 
 class JsonToolTests(unittest.TestCase):
