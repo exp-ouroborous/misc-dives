@@ -258,6 +258,10 @@
         button.setAttribute("aria-label", accessibleLabel);
         button.title = accessibleLabel;
         button.innerHTML = label === "path" ? pathIconSvg() : copyIconSvg();
+        const tooltip = document.createElement("span");
+        tooltip.className = "copy-tooltip";
+        tooltip.textContent = accessibleLabel;
+        button.append(tooltip);
         button.dataset.copy = value;
         return button;
       }

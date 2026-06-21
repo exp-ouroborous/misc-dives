@@ -443,8 +443,8 @@ button:focus-visible {
   border: 1px solid #d7dfdf;
   border-radius: 8px;
   background: #fbfcf8;
-  padding: 10px;
-  margin-top: 14px;
+  padding: 10px 10px 10px 18px;
+  margin-top: 22px;
 }
 
 .json-node {
@@ -454,6 +454,7 @@ button:focus-visible {
 }
 
 .json-node summary {
+  padding-left: 4px;
   cursor: pointer;
   list-style-position: outside;
 }
@@ -539,6 +540,7 @@ button:focus-visible {
 .copy-node {
   display: inline-grid;
   place-items: center;
+  position: relative;
   width: 30px;
   height: 30px;
   border: 1px solid #c9d2d6;
@@ -553,6 +555,32 @@ button:focus-visible {
 
 .copy-node:hover {
   background: #eef4f8;
+}
+
+.copy-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 5;
+  min-width: max-content;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  border: 1px solid #c9d2d6;
+  border-radius: 6px;
+  background: #17202a;
+  color: #fff;
+  padding: 5px 7px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(23, 32, 42, 0.18);
+}
+
+.copy-node:hover .copy-tooltip,
+.copy-node:focus-visible .copy-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .json-children {
