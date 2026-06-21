@@ -61,6 +61,13 @@ class RegexToolTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("missing", result["error"].lower())
 
+    def test_page_has_prominent_result_regions(self):
+        page = (ROOT / "dives" / "regex-tester" / "index.html").read_text()
+
+        self.assertIn('id="fullMatchBanner"', page)
+        self.assertIn('id="matchList"', page)
+        self.assertIn("renderMatchCards", page)
+
 
 class JsonToolTests(unittest.TestCase):
     def test_formats_with_sorting(self):

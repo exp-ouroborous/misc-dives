@@ -64,6 +64,12 @@
               <div class="metric"><b id="spanCount">0</b><span>spans</span></div>
               <div class="metric"><b id="fullMatch">No</b><span>full string</span></div>
             </div>
+            <div id="fullMatchBanner" class="result-banner" data-state="empty">
+              <span class="result-banner-label">Full string</span>
+              <strong>Run the regex</strong>
+              <span class="result-banner-detail">The whole-input result will appear here.</span>
+            </div>
+            <div id="matchList" class="match-list" aria-live="polite"></div>
             <pre id="output" class="output">Run the sample to see matches, groups, spans, and characters.</pre>
           </div>
         </div>
@@ -95,6 +101,8 @@
           setStatus(statusEl, "Regex error", "error");
           latestOutput = result.error;
           setText(outputEl, result.error);
+          renderFullMatch(null);
+          renderMatchCards([]);
           return;
         }
 
@@ -104,6 +112,8 @@
         setText(document.querySelector("#groupCount"), groups);
         setText(document.querySelector("#spanCount"), result.matches.length);
         setText(document.querySelector("#fullMatch"), result.full_match ? "Yes" : "No");
+        renderFullMatch(result);
+        renderMatchCards(result.matches);
         latestOutput = formatRegexOutput(result);
         setText(outputEl, latestOutput);
       }
@@ -151,6 +161,90 @@
         }
 
         return lines.join("\n");
+      }
+
+      function renderFullMatch(result) {
+        const banner = document.querySelector("#fullMatchBanner");
+        banner.replaceChildren();
+
+        const label = document.createElement("span");
+        label.className = "result-banner-label";
+        label.textContent = "Full string";
+
+        const value = document.createElement("strong");
+        const detail = document.createElement("span");
+        detail.className = "result-banner-detail";
+
+        if (result === null) {
+          banner.dataset.state = "empty";
+          value.textContent = "Unavailable";
+          detail.textContent = "Fix the regex error to check the whole string.";
+        } else if (result.full_match) {
+          banner.dataset.state = "yes";
+          value.textContent = "Yes, the whole input matches";
+          detail.textContent = formatSpan(result.full_match_span[0], result.full_match_span[1]);
+        } else {
+          banner.dataset.state = "no";
+          value.textContent = "No, only partial matches were found";
+          detail.textContent = "Use anchors or adjust the pattern if you need a full-string match.";
+        }
+
+        banner.append(label, value, detail);
+      }
+
+      function renderMatchCards(matches) {
+        const list = document.querySelector("#matchList");
+        list.replaceChildren();
+
+        if (matches.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "match-empty";
+          empty.textContent = "No matches to show.";
+          list.append(empty);
+          return;
+        }
+
+        for (const match of matches) {
+          const card = document.createElement("article");
+          card.className = "match-card";
+
+          const header = document.createElement("div");
+          header.className = "match-card-header";
+
+          const title = document.createElement("strong");
+          title.textContent = `Match ${match.index}`;
+
+          const span = document.createElement("span");
+          span.className = "span-pill";
+          span.textContent = formatSpan(match.start, match.end);
+
+          header.append(title, span);
+
+          const chars = document.createElement("code");
+          chars.className = "match-chars";
+          chars.textContent = match.match;
+
+          const groups = document.createElement("div");
+          groups.className = "group-list";
+
+          if (match.group_spans.length === 0) {
+            const none = document.createElement("span");
+            none.className = "group-chip muted";
+            none.textContent = "No capture groups";
+            groups.append(none);
+          } else {
+            for (const group of match.group_spans) {
+              const chip = document.createElement("span");
+              chip.className = group.matched ? "group-chip" : "group-chip muted";
+              const label = group.name ? `${group.name} #${group.number}` : `#${group.number}`;
+              chip.textContent = `${label} ${formatSpan(group.start, group.end)} ${group.text ?? "(unmatched)"}`;
+              groups.append(chip);
+            }
+          }
+
+          card.append(header, chars, groups);
+          list.append(card);
+        }
       }
 
       async function run() {

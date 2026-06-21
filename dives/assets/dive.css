@@ -285,6 +285,124 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
+.result-banner {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left-width: 8px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  background: #f7f8f5;
+}
+
+.result-banner[data-state="yes"] {
+  border-color: rgba(36, 117, 91, 0.38);
+  border-left-color: var(--good);
+  background: #eef8f3;
+}
+
+.result-banner[data-state="no"] {
+  border-color: rgba(166, 61, 64, 0.34);
+  border-left-color: var(--bad);
+  background: #fff2f1;
+}
+
+.result-banner[data-state="empty"] {
+  border-left-color: var(--gold);
+}
+
+.result-banner-label,
+.result-banner-detail {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.result-banner strong {
+  color: var(--ink);
+  font-size: 1.02rem;
+}
+
+.match-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.match-card {
+  border: 1px solid #cad6d6;
+  border-radius: 8px;
+  background: #fbfcf8;
+  padding: 12px;
+}
+
+.match-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.match-card-header strong {
+  font-size: 0.95rem;
+}
+
+.span-pill {
+  border-radius: 999px;
+  background: rgba(48, 105, 152, 0.12);
+  color: var(--accent-strong);
+  padding: 4px 8px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.match-chars {
+  display: block;
+  border-radius: 7px;
+  background: #17202a;
+  color: #f5fbff;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+}
+
+.group-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.group-chip {
+  border: 1px solid rgba(48, 105, 152, 0.24);
+  border-radius: 999px;
+  background: #edf5fb;
+  color: #163d5d;
+  padding: 5px 8px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.group-chip.muted,
+.match-empty {
+  border-color: var(--line);
+  background: #f6f7f2;
+  color: var(--muted);
+}
+
+.match-empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  font-weight: 700;
+}
+
 pre,
 code {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
