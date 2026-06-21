@@ -66,8 +66,8 @@
               <div class="metric"><b id="maxDepth">0</b><span>depth</span></div>
               <div class="metric"><b id="rootCount">0</b><span>root count</span></div>
             </div>
-            <div id="jsonTree" class="json-tree" aria-live="polite"></div>
             <pre id="output" class="output">Format the sample to see validated JSON.</pre>
+            <div id="jsonTree" class="json-tree" aria-live="polite"></div>
           </div>
         </div>
       </section>
@@ -244,7 +244,7 @@
 
         const actions = document.createElement("div");
         actions.className = "json-node-actions";
-        actions.append(copyButtonFor("Path", node.path), copyButtonFor("Value", node.copy_value));
+        actions.append(copyButtonFor("path", node.path), copyButtonFor("value", node.copy_value));
 
         header.append(main, actions);
         return header;
@@ -254,9 +254,27 @@
         const button = document.createElement("button");
         button.className = "copy-node";
         button.type = "button";
-        button.textContent = `Copy ${label}`;
+        const accessibleLabel = label === "path" ? "Copy path" : "Copy value";
+        button.setAttribute("aria-label", accessibleLabel);
+        button.title = accessibleLabel;
+        button.innerHTML = label === "path" ? pathIconSvg() : copyIconSvg();
         button.dataset.copy = value;
         return button;
+      }
+
+      function pathIconSvg() {
+        return `<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M6 6h5a4 4 0 0 1 4 4v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="6" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+          <circle cx="15" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+        </svg>`;
+      }
+
+      function copyIconSvg() {
+        return `<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+          <rect x="8" y="8" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M6 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>`;
       }
     </script>
   </body>

@@ -111,6 +111,13 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn('id="jsonTree"', page)
         self.assertIn("renderJsonTree", page)
         self.assertIn("copy-node", page)
+        self.assertLess(page.index('id="output"'), page.index('id="jsonTree"'))
+        self.assertIn('"Copy path"', page)
+        self.assertIn('"Copy value"', page)
+        self.assertIn("pathIconSvg", page)
+        self.assertIn("copyIconSvg", page)
+        self.assertNotIn("Copy Path", page)
+        self.assertNotIn("Copy Value", page)
 
 
 class TextDiffToolTests(unittest.TestCase):
