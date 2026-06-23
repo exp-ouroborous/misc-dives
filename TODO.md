@@ -22,3 +22,6 @@ Each is intentionally gated on the dive outgrowing "learning dive" status:
 
 - [ ] Decide when a dive should graduate into its own repository (criteria in
       `README.md` / `AGENTS.md`: real infra, CI, secrets, or a long-lived app).
+- [ ] CI for `tests/` is deliberately **not** set up — `AGENTS.md` discourages
+      infrastructure. Run `python3 -m pytest tests/` locally. Revisit only if the
+      suite grows enough that manual runs stop being reliable.
