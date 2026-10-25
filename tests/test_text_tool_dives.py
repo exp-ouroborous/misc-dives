@@ -15,60 +15,32 @@ def load_tool(slug):
 
 
 class RegexToolTests(unittest.TestCase):
-    def test_reports_named_groups_and_substitution(self):
-        tool = load_tool("regex-tester")
+    """The regex page runs a regex engine in the chosen language inside the
+    wasm-dives sandbox; the engines and their contract tests live there."""
 
-        result = tool.analyze_regex(
-            r"(?P<word>\b\w{4}\b)",
-            "time code test go",
-            ["ignorecase"],
-            "[$word]",
-        )
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["match_count"], 3)
-        self.assertEqual(result["matches"][0]["groups"]["word"], "time")
-        self.assertEqual(
-            result["matches"][0]["group_spans"],
-            [
-                {
-                    "number": 1,
-                    "name": "word",
-                    "text": "time",
-                    "start": 0,
-                    "end": 4,
-                    "matched": True,
-                }
-            ],
-        )
-        self.assertEqual(result["substitution"], "[time] [code] [test] go")
-        self.assertFalse(result["full_match"])
-
-    def test_reports_full_string_match(self):
-        tool = load_tool("regex-tester")
-
-        result = tool.analyze_regex(r"\w{4}", "time", [], "")
-
-        self.assertTrue(result["ok"])
-        self.assertTrue(result["full_match"])
-        self.assertEqual(result["full_match_span"], [0, 4])
-
-    def test_reports_regex_errors(self):
-        tool = load_tool("regex-tester")
-
-        result = tool.analyze_regex("(", "abc", [], "")
-
-        self.assertFalse(result["ok"])
-        self.assertIn("missing", result["error"].lower())
+    def setUp(self):
+        self.page = (ROOT / "dives" / "regex-tester" / "index.html").read_text()
 
     def test_page_has_prominent_result_regions(self):
-        page = (ROOT / "dives" / "regex-tester" / "index.html").read_text()
+        self.assertIn('id="fullMatchBanner"', self.page)
+        self.assertIn('id="matchList"', self.page)
+        self.assertIn("renderMatchCards", self.page)
+        self.assertIn("renderMatchContext", self.page)
+        self.assertNotIn("match-chars", self.page)
 
-        self.assertIn('id="fullMatchBanner"', page)
-        self.assertIn('id="matchList"', page)
-        self.assertIn("renderMatchCards", page)
-        self.assertIn("renderMatchContext", page)
-        self.assertNotIn("match-chars", page)
+    def test_language_picker_and_view_source(self):
+        self.assertIn('id="languagePicker"', self.page)
+        self.assertIn('id="viewSource"', self.page)
+        self.assertIn("../wasm-assets/language-picker.mjs", self.page)
+        self.assertIn("../wasm-assets/source-viewer.mjs", self.page)
+        self.assertIn("../wasm-assets/tool-engine.mjs", self.page)
+        self.assertIn('["python", "csharp", "go", "cpp"]', self.page)
+
+    def test_no_in_page_python_and_no_ascii_flag(self):
+        self.assertNotIn("pyodide.js", self.page)
+        self.assertNotIn('id="ascii"', self.page)
+        self.assertNotIn("innerHTML", self.page)
+        self.assertFalse((ROOT / "dives" / "regex-tester" / "tool.py").exists())
 
 
 class JsonToolTests(unittest.TestCase):

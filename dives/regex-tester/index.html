@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Regex Tester · misc-dives</title>
     <link rel="stylesheet" href="../assets/dive.css" />
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+    <link rel="stylesheet" href="../wasm-assets/tool.css" />
   </head>
   <body>
     <main class="page">
@@ -19,9 +19,16 @@
         <h1 class="brand-title">Regex Tester</h1>
       </div>
       <p class="intro">
-        Run Python regular expressions in the browser. Inspect matches, spans, groups, flags,
-        and a substitution preview without sending text anywhere.
+        Test a regular expression with the regex engine of the language you pick — Python, C#,
+        Go or C++ — each running in WebAssembly in a sandbox in your browser. Engines differ:
+        Go's RE2 has no lookaround, C++'s <code>std::regex</code> has no named groups.
       </p>
+      <div class="tool-language">
+        <div id="languagePicker" class="lang-picker"></div>
+        <button id="viewSource" class="button secondary" type="button">View source</button>
+        <button id="stop" class="button secondary" type="button" hidden>Stop</button>
+        <span id="engineName" class="engine-name"></span>
+      </div>
 
       <section class="tool-grid">
         <div class="panel">
@@ -47,7 +54,6 @@
               <label class="check"><input id="ignorecase" type="checkbox" /> Ignore case</label>
               <label class="check"><input id="multiline" type="checkbox" /> Multiline</label>
               <label class="check"><input id="dotall" type="checkbox" /> Dot matches newline</label>
-              <label class="check"><input id="ascii" type="checkbox" /> ASCII</label>
             </div>
           </div>
         </div>
@@ -77,28 +83,87 @@
     </main>
 
     <script type="module">
-      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+      import { copyText, setStatus, setText } from "../assets/pyodide-tools.js";
+      import { createLanguagePicker } from "../wasm-assets/language-picker.mjs";
+      import { openSourceViewer } from "../wasm-assets/source-viewer.mjs";
+      import { createToolEngine, sourcePath } from "../wasm-assets/tool-engine.mjs";
+      import { formatProgress } from "../wasm-assets/format.mjs";
+
+      const LANGUAGES_OFFERED = ["python", "csharp", "go", "cpp"];
+      // Each engine spells named groups its own way (C++ has none).
+      const SAMPLES = {
+        python: { pattern: "(?P<word>\\b\\w{4}\\b)", replacement: "[$word]" },
+        go: { pattern: "(?P<word>\\b\\w{4}\\b)", replacement: "[$word]" },
+        csharp: { pattern: "(?<word>\\b\\w{4}\\b)", replacement: "[$word]" },
+        cpp: { pattern: "\\b(\\w{4})\\b", replacement: "[$1]" },
+      };
+      const PHASES = { downloading: "Downloading the runtime…", starting: "Starting the runtime…", running: "Running…" };
 
       const statusEl = document.querySelector("#status");
       const outputEl = document.querySelector("#output");
       const runButton = document.querySelector("#run");
+      const stopButton = document.querySelector("#stop");
       const copyButton = document.querySelector("#copy");
-      let pyodideReady;
+      const patternEl = document.querySelector("#pattern");
+      const replacementEl = document.querySelector("#replacement");
       let latestOutput = "";
+      let language = "python";
+      let live = false;
+      let debounce = 0;
+      let runToken = 0;
 
-      async function init() {
-        const pyodide = await getPyodide(statusEl);
-        await loadPythonFile(pyodide, "tool.py");
-        return pyodide;
-      }
+      const engine = createToolEngine({
+        onStatus(update) {
+          if (update.language !== language) return;
+          if (update.phase && PHASES[update.phase]) setStatus(statusEl, PHASES[update.phase], "loading");
+          if (update.progress?.total) setStatus(statusEl, `Downloading the runtime… ${formatProgress(update.progress)}`, "loading");
+        },
+      });
+
+      createLanguagePicker({
+        root: document.querySelector("#languagePicker"),
+        languages: LANGUAGES_OFFERED,
+        value: language,
+        onChange(next) {
+          // Swap the sample only if it is still the previous language's sample.
+          const old = SAMPLES[language];
+          if (patternEl.value === old.pattern && replacementEl.value === old.replacement) {
+            patternEl.value = SAMPLES[next].pattern;
+            replacementEl.value = SAMPLES[next].replacement;
+          }
+          language = next;
+          setText(document.querySelector("#engineName"), "");
+          if (live) run();
+        },
+      });
+      patternEl.value = SAMPLES.python.pattern;
+      replacementEl.value = SAMPLES.python.replacement;
 
       function selectedFlags() {
-        return ["ignorecase", "multiline", "dotall", "ascii"].filter((id) => document.querySelector(`#${id}`).checked);
+        return ["ignorecase", "multiline", "dotall"].filter((id) => document.querySelector(`#${id}`).checked);
+      }
+
+      function codePointLength(text) {
+        return [...text].length;
+      }
+
+      // Engines report offsets in code points; slice the text the same way.
+      function sliceCodePoints(text, start, end) {
+        return [...text].slice(start, end).join("");
+      }
+
+      function groupChips(match) {
+        const chips = Object.entries(match.groups ?? {}).map(([name, value]) => ({ label: name, value }));
+        match.numbered_groups.forEach((value, index) => chips.push({ label: `#${index + 1}`, value }));
+        return chips;
       }
 
       function render(result) {
+        setText(document.querySelector("#engineName"), result.engine ? `Engine: ${result.engine}` : "");
         if (!result.ok) {
           setStatus(statusEl, "Regex error", "error");
+          for (const id of ["matchCount", "groupCount", "spanCount"]) setText(document.querySelector(`#${id}`), 0);
+          setText(document.querySelector("#fullMatch"), "—");
           latestOutput = result.error;
           setText(outputEl, result.error);
           renderFullMatch(null);
@@ -107,14 +172,15 @@
         }
 
         setStatus(statusEl, "Regex complete", "ready");
-        const groups = result.matches.reduce((count, match) => count + match.group_spans.length, 0);
+        const text = document.querySelector("#text").value;
+        const groups = result.matches.reduce((count, match) => count + match.numbered_groups.length, 0);
         setText(document.querySelector("#matchCount"), result.match_count);
         setText(document.querySelector("#groupCount"), groups);
         setText(document.querySelector("#spanCount"), result.matches.length);
         setText(document.querySelector("#fullMatch"), result.full_match ? "Yes" : "No");
-        renderFullMatch(result);
-        renderMatchCards(result.matches, document.querySelector("#text").value);
-        latestOutput = formatRegexOutput(result);
+        renderFullMatch(result, text);
+        renderMatchCards(result.matches, text);
+        latestOutput = formatRegexOutput(result, text);
         setText(outputEl, latestOutput);
       }
 
@@ -128,53 +194,33 @@
         return `[${start}, ${end})`;
       }
 
-      function formatRegexOutput(result) {
-        const lines = [];
-        lines.push(`Matches: ${result.match_count}`);
-        lines.push(`Full string match: ${result.full_match ? `yes ${formatSpan(result.full_match_span[0], result.full_match_span[1])}` : "no"}`);
-        if (result.substitution) {
-          lines.push("");
-          lines.push("Substitution preview:");
-          lines.push(result.substitution);
-        }
-
+      function formatRegexOutput(result, text) {
+        const lines = [`Engine: ${result.engine}`, `Matches: ${result.match_count}`];
+        lines.push(`Full string match: ${result.full_match ? `yes ${formatSpan(0, codePointLength(text))}` : "no"}`);
+        if (result.substitution) lines.push("", "Substitution preview:", result.substitution);
         for (const match of result.matches) {
-          lines.push("");
-          lines.push(`Match ${match.index} ${formatSpan(match.start, match.end)}: ${quote(match.match)}`);
-          lines.push(`  characters: ${quote(match.match)}`);
-
-          if (match.group_spans.length === 0) {
+          lines.push("", `Match ${match.index} ${formatSpan(match.start, match.end)}: ${quote(match.match)}`);
+          const chips = groupChips(match);
+          if (chips.length === 0) {
             lines.push("  groups: none");
             continue;
           }
-
           lines.push("  groups:");
-          for (const group of match.group_spans) {
-            const label = group.name ? `${group.name} (#${group.number})` : `#${group.number}`;
-            lines.push(`    ${label} ${formatSpan(group.start, group.end)}: ${quote(group.text)}`);
-          }
+          for (const chip of chips) lines.push(`    ${chip.label}: ${quote(chip.value)}`);
         }
-
-        if (result.matches.length === 0) {
-          lines.push("");
-          lines.push("No matches.");
-        }
-
+        if (result.matches.length === 0) lines.push("", "No matches.");
         return lines.join("\n");
       }
 
-      function renderFullMatch(result) {
+      function renderFullMatch(result, text = "") {
         const banner = document.querySelector("#fullMatchBanner");
         banner.replaceChildren();
-
         const label = document.createElement("span");
         label.className = "result-banner-label";
         label.textContent = "Full string";
-
         const value = document.createElement("strong");
         const detail = document.createElement("span");
         detail.className = "result-banner-detail";
-
         if (result === null) {
           banner.dataset.state = "empty";
           value.textContent = "Unavailable";
@@ -182,20 +228,18 @@
         } else if (result.full_match) {
           banner.dataset.state = "yes";
           value.textContent = "Yes, the whole input matches";
-          detail.textContent = formatSpan(result.full_match_span[0], result.full_match_span[1]);
+          detail.textContent = formatSpan(0, codePointLength(text));
         } else {
           banner.dataset.state = "no";
           value.textContent = "No, only partial matches were found";
           detail.textContent = "Use anchors or adjust the pattern if you need a full-string match.";
         }
-
         banner.append(label, value, detail);
       }
 
       function renderMatchCards(matches, sourceText) {
         const list = document.querySelector("#matchList");
         list.replaceChildren();
-
         if (matches.length === 0) {
           const empty = document.createElement("div");
           empty.className = "match-empty";
@@ -203,43 +247,34 @@
           list.append(empty);
           return;
         }
-
         for (const match of matches) {
           const card = document.createElement("article");
           card.className = "match-card";
-
           const header = document.createElement("div");
           header.className = "match-card-header";
-
           const title = document.createElement("strong");
           title.textContent = `Match ${match.index}`;
-
           const span = document.createElement("span");
           span.className = "span-pill";
           span.textContent = formatSpan(match.start, match.end);
-
           header.append(title, span);
-
           const context = renderMatchContext(sourceText, match.start, match.end);
-
           const groups = document.createElement("div");
           groups.className = "group-list";
-
-          if (match.group_spans.length === 0) {
+          const chips = groupChips(match);
+          if (chips.length === 0) {
             const none = document.createElement("span");
             none.className = "group-chip muted";
             none.textContent = "No capture groups";
             groups.append(none);
           } else {
-            for (const group of match.group_spans) {
-              const chip = document.createElement("span");
-              chip.className = group.matched ? "group-chip" : "group-chip muted";
-              const label = group.name ? `${group.name} #${group.number}` : `#${group.number}`;
-              chip.textContent = `${label} ${formatSpan(group.start, group.end)} ${group.text ?? "(unmatched)"}`;
-              groups.append(chip);
+            for (const chip of chips) {
+              const el = document.createElement("span");
+              el.className = chip.value === null ? "group-chip muted" : "group-chip";
+              el.textContent = `${chip.label} ${chip.value ?? "(unmatched)"}`;
+              groups.append(el);
             }
           }
-
           card.append(header, context, groups);
           list.append(card);
         }
@@ -247,79 +282,82 @@
 
       function renderMatchContext(sourceText, start, end) {
         const radius = 38;
+        const total = codePointLength(sourceText);
         const context = document.createElement("div");
         context.className = "match-context";
-
         const label = document.createElement("span");
         label.className = "match-context-label";
         label.textContent = "In context";
-
         const line = document.createElement("code");
         line.className = "match-context-line";
-
         const leftStart = Math.max(0, start - radius);
-        const rightEnd = Math.min(sourceText.length, end + radius);
-        const hasLeftElision = leftStart > 0;
-        const hasRightElision = rightEnd < sourceText.length;
-
-        if (hasLeftElision) {
+        const rightEnd = Math.min(total, end + radius);
+        if (leftStart > 0) {
           const elision = document.createElement("span");
           elision.className = "context-elision";
           elision.textContent = "...";
           line.append(elision);
         }
-
         const before = document.createElement("span");
-        before.textContent = sourceText.slice(leftStart, start);
-
+        before.textContent = sliceCodePoints(sourceText, leftStart, start);
         const mark = document.createElement("mark");
-        mark.textContent = sourceText.slice(start, end);
-
+        mark.textContent = sliceCodePoints(sourceText, start, end);
         const after = document.createElement("span");
-        after.textContent = sourceText.slice(end, rightEnd);
-
+        after.textContent = sliceCodePoints(sourceText, end, rightEnd);
         line.append(before, mark, after);
-
-        if (hasRightElision) {
+        if (rightEnd < total) {
           const elision = document.createElement("span");
           elision.className = "context-elision";
           elision.textContent = "...";
           line.append(elision);
         }
-
         context.append(label, line);
         return context;
       }
 
       async function run() {
-        runButton.disabled = true;
+        live = true;
+        const runFor = language;
+        const token = ++runToken;
         setStatus(statusEl, "Running regex...", "loading");
+        stopButton.hidden = false;
         try {
-          const pyodide = await pyodideReady;
-          const result = await callPythonJson(pyodide, "analyze_regex", {
-            pattern: document.querySelector("#pattern").value,
+          const reply = await engine.call(runFor, "regex", {
+            pattern: patternEl.value,
             text: document.querySelector("#text").value,
             flags: selectedFlags(),
-            replacement: document.querySelector("#replacement").value,
+            replacement: replacementEl.value,
           });
-          render(result);
+          if (runFor !== language) return;
+          if (!reply.ok) throw new Error(reply.error);
+          render(reply.output);
         } catch (error) {
-          setStatus(statusEl, "Runtime error", "error");
+          if (error.message === "superseded") return;
+          setStatus(statusEl, error.message === "stopped" ? "Stopped" : "Runtime error", error.message === "stopped" ? "ready" : "error");
           latestOutput = error.message;
-          setText(outputEl, error.stack || error.message);
+          setText(outputEl, error.message === "stopped" ? "Stopped. Run again to restart the engine." : error.message);
         } finally {
-          runButton.disabled = false;
+          // Only the newest run decides whether Stop is still needed.
+          if (token === runToken) stopButton.hidden = true;
         }
       }
 
-      pyodideReady = init().catch((error) => {
-        setStatus(statusEl, "Pyodide failed", "error");
-        setText(outputEl, error.stack || error.message);
-        throw error;
-      });
+      function scheduleRun() {
+        if (!live) return;
+        clearTimeout(debounce);
+        debounce = setTimeout(run, 250);
+      }
 
       runButton.addEventListener("click", run);
+      stopButton.addEventListener("click", () => engine.stop(language));
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+      for (const id of ["pattern", "text", "replacement", "ignorecase", "multiline", "dotall"]) {
+        document.querySelector(`#${id}`).addEventListener("input", scheduleRun);
+      }
+      document.querySelector("#viewSource").addEventListener("click", () =>
+        openSourceViewer({ language, title: "Regex engine", url: sourcePath(language, "regex") }),
+      );
+      setStatus(statusEl, "Pick a language and press Run regex", "ready");
     </script>
   </body>
 </html>

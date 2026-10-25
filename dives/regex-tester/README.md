@@ -15,3 +15,13 @@ Python regex behavior can be exposed cleanly through a small JSON-shaped functio
 ## What should happen next, if anything?
 
 Add highlighting in the input text if this grows beyond a learning dive.
+
+## Update (2026-10-25): every language
+
+The page now runs the regex in the language you pick — Python, C#, Go or
+C/C++ — on that language's own engine in WebAssembly, inside the wasm-dives
+sandbox (a separate origin). The engines and their shared contract tests live
+in the `wasm-dives` repo (`site/run/<lang>/engines/regex.*`,
+`tests/engines/regex-cases.json`); this page only renders results. "View
+source" shows the engine for the chosen language. `tool.py` is gone: Python
+runs through the same sandbox path as the others.
