@@ -114,36 +114,34 @@ class JsonToolTests(unittest.TestCase):
 
 
 class TextDiffToolTests(unittest.TestCase):
-    def test_builds_unified_diff_and_summary(self):
-        tool = load_tool("text-diff")
+    """The diff page runs a diff engine in the chosen language inside the
+    wasm-dives sandbox; the engines and their contract tests live there."""
 
-        result = tool.build_diff("alpha\nbeta\ngamma\n", "alpha\nbetter\ngamma\ndelta\n")
+    def setUp(self):
+        self.page = (ROOT / "dives" / "text-diff" / "index.html").read_text()
 
-        self.assertTrue(result["ok"])
-        self.assertIn("-beta", result["diff"])
-        self.assertIn("+better", result["diff"])
-        self.assertIn("+delta", result["diff"])
-        self.assertEqual(result["added"], 2)
-        self.assertEqual(result["removed"], 1)
+    def test_language_picker_and_view_source(self):
+        self.assertIn('id="languagePicker"', self.page)
+        self.assertIn('id="viewSource"', self.page)
+        self.assertIn('id="stop"', self.page)
+        self.assertIn('engine.call(runFor, "diff"', self.page)
+        self.assertIn('["python", "csharp", "go", "cpp"]', self.page)
 
-    def test_builds_side_by_side_rows(self):
-        tool = load_tool("text-diff")
+    def test_explains_where_to_run_when_the_engine_modules_are_missing(self):
+        self.assertIn('import("../wasm-assets/', self.page)
+        self.assertNotIn('from "../wasm-assets/', self.page)
+        self.assertIn("https://wordsfortheunwise.com/learn/text-diff/", self.page)
 
-        result = tool.build_diff("alpha\nbeta\ngamma\n", "alpha\nbetter\ngamma\ndelta\n")
+    def test_stop_cancels_a_scheduled_rerun(self):
+        self.assertIn("clearTimeout(debounce);\n        engine.stop(language);", self.page)
 
-        self.assertTrue(result["ok"])
-        self.assertEqual(
-            result["rows"],
-            [
-                {"kind": "equal", "left_line": 1, "left_text": "alpha", "right_line": 1, "right_text": "alpha"},
-                {"kind": "replace", "left_line": 2, "left_text": "beta", "right_line": 2, "right_text": "better"},
-                {"kind": "equal", "left_line": 3, "left_text": "gamma", "right_line": 3, "right_text": "gamma"},
-                {"kind": "insert", "left_line": None, "left_text": "", "right_line": 4, "right_text": "delta"},
-            ],
-        )
+    def test_no_in_page_python(self):
+        self.assertNotIn("pyodide.js", self.page)
+        self.assertNotIn("innerHTML", self.page)
+        self.assertFalse((ROOT / "dives" / "text-diff" / "tool.py").exists())
 
     def test_text_diff_page_has_visual_diff_region(self):
-        page = (ROOT / "dives" / "text-diff" / "index.html").read_text()
+        page = self.page
 
         self.assertIn('id="visualDiff"', page)
         self.assertIn("renderVisualDiff", page)
@@ -154,7 +152,7 @@ class TextDiffToolTests(unittest.TestCase):
         self.assertNotIn("Unified diff", page)
 
     def test_text_diff_page_has_file_loaders(self):
-        page = (ROOT / "dives" / "text-diff" / "index.html").read_text()
+        page = self.page
 
         self.assertIn('id="leftFile"', page)
         self.assertIn('id="rightFile"', page)

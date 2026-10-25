@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Text Diff · misc-dives</title>
     <link rel="stylesheet" href="../assets/dive.css" />
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+    <link rel="stylesheet" href="../wasm-assets/tool.css" />
   </head>
   <body>
     <main class="page">
@@ -19,9 +19,17 @@
         <h1 class="brand-title">Text Diff</h1>
       </div>
       <p class="intro">
-        Compare two text blocks with Python's `difflib` in a side-by-side browser view
-        without installing a command-line tool.
+        Compare two text blocks line by line in the language you pick — Python's
+        <code>difflib</code>, DiffPlex (C#), go-diff (Go) or a hand-written Myers diff in C++ —
+        each running in WebAssembly in a sandbox in your browser. Python matches differently
+        from the Myers-based three, so the same texts can pair lines differently.
       </p>
+      <div class="tool-language">
+        <div id="languagePicker" class="lang-picker"></div>
+        <button id="viewSource" class="button secondary" type="button">View source</button>
+        <button id="stop" class="button secondary" type="button" hidden>Stop</button>
+        <span id="engineName" class="engine-name"></span>
+      </div>
 
       <section class="tool-grid">
         <div class="panel">
@@ -83,33 +91,78 @@ delta
     </main>
 
     <script type="module">
-      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+      import { copyText, setStatus, setText } from "../assets/pyodide-tools.js";
 
+      // The engines and their shell come from wasm-dives through the
+      // wordsfortheunwise.com /learn proxy; served anywhere else they are absent.
+      const MAIN_SITE = "https://wordsfortheunwise.com/learn/text-diff/";
       const statusEl = document.querySelector("#status");
       const visualDiffEl = document.querySelector("#visualDiff");
-      const runButton = document.querySelector("#run");
-      const copyButton = document.querySelector("#copy");
-      let pyodideReady;
-      let latestOutput = "";
-
-      async function init() {
-        const pyodide = await getPyodide(statusEl);
-        await loadPythonFile(pyodide, "tool.py");
-        return pyodide;
+      let shell;
+      try {
+        shell = await Promise.all([
+          import("../wasm-assets/language-picker.mjs"),
+          import("../wasm-assets/source-viewer.mjs"),
+          import("../wasm-assets/tool-engine.mjs"),
+          import("../wasm-assets/format.mjs"),
+        ]);
+      } catch {
+        setStatus(statusEl, "Open on wordsfortheunwise.com", "error");
+        renderVisualMessage(`This tool runs its diff engines through ${MAIN_SITE} — open it there.`);
+        document.querySelector("#run").disabled = true;
+        throw new Error("wasm-dives tool shell unavailable");
       }
+      const [{ createLanguagePicker }, { openSourceViewer }, { createToolEngine, sourcePath }, { formatProgress }] = shell;
+
+      const LANGUAGES_OFFERED = ["python", "csharp", "go", "cpp"];
+      const PHASES = { downloading: "Downloading the runtime…", starting: "Starting the runtime…", running: "Running…" };
+
+      const runButton = document.querySelector("#run");
+      const stopButton = document.querySelector("#stop");
+      const copyButton = document.querySelector("#copy");
+      let latestOutput = "";
+      let language = "python";
+      let live = false;
+      let debounce = 0;
+      let runToken = 0;
+
+      const engine = createToolEngine({
+        onStatus(update) {
+          if (update.language !== language) return;
+          if (update.phase && PHASES[update.phase]) setStatus(statusEl, PHASES[update.phase], "loading");
+          if (update.progress?.total) setStatus(statusEl, `Downloading the runtime… ${formatProgress(update.progress)}`, "loading");
+        },
+      });
+
+      createLanguagePicker({
+        root: document.querySelector("#languagePicker"),
+        languages: LANGUAGES_OFFERED,
+        value: language,
+        onChange(next) {
+          language = next;
+          setText(document.querySelector("#engineName"), "");
+          if (live) run();
+        },
+      });
 
       async function run() {
-        runButton.disabled = true;
+        live = true;
+        const runFor = language;
+        const token = ++runToken;
         setStatus(statusEl, "Building diff...", "loading");
+        stopButton.hidden = false;
         try {
-          const pyodide = await pyodideReady;
-          const result = await callPythonJson(pyodide, "build_diff", {
+          const reply = await engine.call(runFor, "diff", {
             left: document.querySelector("#left").value,
             right: document.querySelector("#right").value,
             from_label: document.querySelector("#fromLabel").value,
             to_label: document.querySelector("#toLabel").value,
           });
-
+          if (runFor !== language || token !== runToken) return;
+          if (!reply.ok) throw new Error(reply.error);
+          const result = reply.output;
+          setText(document.querySelector("#engineName"), result.engine ? `Engine: ${result.engine}` : "");
+          if (!result.ok) throw new Error(result.error);
           setStatus(statusEl, "Diff complete", "ready");
           setText(document.querySelector("#added"), result.added);
           setText(document.querySelector("#removed"), result.removed);
@@ -117,29 +170,40 @@ delta
           renderVisualDiff(result.rows);
           latestOutput = formatRowsForCopy(result.rows, result);
         } catch (error) {
-          setStatus(statusEl, "Runtime error", "error");
+          if (error.message === "superseded" || token !== runToken) return;
+          setStatus(statusEl, error.message === "stopped" ? "Stopped" : "Runtime error", error.message === "stopped" ? "ready" : "error");
           latestOutput = error.message;
-          renderVisualMessage(error.stack || error.message);
+          renderVisualMessage(error.message === "stopped" ? "Stopped. Build the diff again to restart the engine." : error.message);
         } finally {
-          runButton.disabled = false;
+          // Only the newest run decides whether Stop is still needed.
+          if (token === runToken) stopButton.hidden = true;
         }
       }
 
-      pyodideReady = init().catch((error) => {
-        setStatus(statusEl, "Pyodide failed", "error");
-        latestOutput = error.message;
-        renderVisualMessage(error.stack || error.message);
-        throw error;
-      });
+      function scheduleRun() {
+        if (!live) return;
+        clearTimeout(debounce);
+        debounce = setTimeout(run, 250);
+      }
 
       runButton.addEventListener("click", run);
+      // Stop also cancels a re-run that an edit has scheduled but not started.
+      stopButton.addEventListener("click", () => {
+        clearTimeout(debounce);
+        engine.stop(language);
+      });
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
+      for (const id of ["left", "right", "fromLabel", "toLabel"]) document.querySelector(`#${id}`).addEventListener("input", scheduleRun);
+      document.querySelector("#viewSource").addEventListener("click", () =>
+        openSourceViewer({ language, title: "Diff engine", url: sourcePath(language, "diff") }),
+      );
       document.querySelector("#leftFile").addEventListener("change", (event) => {
         loadFileIntoPane(event.currentTarget, document.querySelector("#left"), document.querySelector("#fromLabel"));
       });
       document.querySelector("#rightFile").addEventListener("change", (event) => {
         loadFileIntoPane(event.currentTarget, document.querySelector("#right"), document.querySelector("#toLabel"));
       });
+      setStatus(statusEl, "Pick a language and press Build diff", "ready");
 
       async function loadFileIntoPane(fileInput, textarea, labelInput) {
         const file = fileInput.files && fileInput.files[0];
@@ -150,6 +214,7 @@ delta
           textarea.value = await file.text();
           labelInput.value = file.name;
           setStatus(statusEl, `Loaded ${file.name}`, "ready");
+          scheduleRun();
         } catch (error) {
           setStatus(statusEl, "File load failed", "error");
         } finally {
