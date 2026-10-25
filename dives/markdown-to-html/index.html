@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Markdown To HTML · misc-dives</title>
     <link rel="stylesheet" href="../assets/dive.css" />
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+    <link rel="stylesheet" href="../wasm-assets/tool.css" />
   </head>
   <body>
     <main class="page">
@@ -19,9 +19,16 @@
         <h1 class="brand-title">Markdown To HTML</h1>
       </div>
       <p class="intro">
-        Load real Python packages with Pyodide and `micropip`, then convert Markdown
-        to HTML entirely in the browser.
+        Convert Markdown to HTML with a real Markdown library in the language you pick —
+        Python-Markdown, Markdig (C#), goldmark (Go) or md4c (C) — each running in WebAssembly
+        in a sandbox in your browser. Features a language's library lacks are shown disabled.
       </p>
+      <div class="tool-language">
+        <div id="languagePicker" class="lang-picker"></div>
+        <button id="viewSource" class="button secondary" type="button">View source</button>
+        <button id="stop" class="button secondary" type="button" hidden>Stop</button>
+        <span id="engineName" class="engine-name"></span>
+      </div>
 
       <section class="tool-grid">
         <div class="panel">
@@ -55,7 +62,7 @@ Raw HTML: <strong>allowed unless sanitized</strong>
               <label class="check"><input id="saneLists" type="checkbox" /> sane lists</label>
               <label class="check"><input id="smarty" type="checkbox" /> smarty</label>
               <label class="check"><input id="nl2br" type="checkbox" /> nl2br</label>
-              <label class="check"><input id="sanitize" type="checkbox" /> sanitize HTML</label>
+              <label class="check"><input id="sanitize" type="checkbox" /> safe mode</label>
             </div>
           </div>
         </div>
@@ -81,16 +88,15 @@ Raw HTML: <strong>allowed unless sanitized</strong>
             </div>
 
             <div id="htmlPane" class="tab-panel" role="tabpanel" aria-labelledby="tabHtml" hidden>
-              <pre id="output" class="output">Install the Markdown package, then convert the sample.</pre>
+              <pre id="output" class="output">Pick a language, then convert the sample.</pre>
             </div>
 
             <div id="notesPane" class="tab-panel" role="tabpanel" aria-labelledby="tabNotes" hidden>
               <div class="notes-list">
-                <div class="note-item"><b>Not GitHub Markdown.</b><span>Python-Markdown is not a CommonMark or full GFM parser.</span></div>
-                <div class="note-item"><b>Raw HTML risk.</b><span>Unsanitized output can contain HTML from the input Markdown.</span></div>
-                <div class="note-item"><b>Browser install.</b><span>`markdown` is installed in Pyodide with `micropip`; `bleach` is used only for sanitizing.</span></div>
-                <div class="note-item"><b>Extensions matter.</b><span>Tables, footnotes, fenced code, TOC, and line breaks depend on selected extensions.</span></div>
-                <div id="packageNotes" class="note-item"><b>Package status.</b><span>Waiting for Pyodide.</span></div>
+                <div class="note-item"><b>Different Markdowns.</b><span>Python-Markdown is not CommonMark; Markdig, goldmark and md4c are. The same input can render differently.</span></div>
+                <div class="note-item"><b>Raw HTML.</b><span>Without safe mode, HTML in the input passes through to the output. The preview never runs scripts either way: it is a sandboxed frame.</span></div>
+                <div id="safeNote" class="note-item"><b>Safe mode.</b><span></span></div>
+                <div class="note-item"><b>Extensions.</b><span>Tables, footnotes, smart quotes and line breaks are extensions; each language's library offers a different set.</span></div>
               </div>
             </div>
           </div>
@@ -99,105 +105,176 @@ Raw HTML: <strong>allowed unless sanitized</strong>
     </main>
 
     <script type="module">
-      import { callPythonJson, copyText, getPyodide, loadPythonFile, setStatus, setText } from "../assets/pyodide-tools.js";
+      import { copyText, setStatus, setText } from "../assets/pyodide-tools.js";
+
+      // The engines and their shell come from wasm-dives through the
+      // wordsfortheunwise.com /learn proxy; served anywhere else they are absent.
+      const MAIN_SITE = "https://wordsfortheunwise.com/learn/markdown-to-html/";
+      let shell;
+      try {
+        shell = await Promise.all([
+          import("../wasm-assets/language-picker.mjs"),
+          import("../wasm-assets/source-viewer.mjs"),
+          import("../wasm-assets/tool-engine.mjs"),
+          import("../wasm-assets/format.mjs"),
+          import("../wasm-assets/markdown-features.mjs"),
+        ]);
+      } catch {
+        setStatus(document.querySelector("#status"), "Open on wordsfortheunwise.com", "error");
+        setText(document.querySelector("#output"), `This tool runs its Markdown engines through ${MAIN_SITE} — open it there.`);
+        document.querySelector("#run").disabled = true;
+        throw new Error("wasm-dives tool shell unavailable");
+      }
+      const [{ createLanguagePicker }, { openSourceViewer }, { createToolEngine, sourcePath }, { formatProgress }, { SUPPORT }] = shell;
+
+      const LANGUAGES_OFFERED = ["python", "csharp", "go", "cpp"];
+      const PHASES = { downloading: "Downloading the runtime…", starting: "Starting the runtime…", running: "Running…" };
+      const LANGUAGE_NAMES = { python: "Python", csharp: "C#", go: "Go", cpp: "C/C++" };
+      // Checkbox id -> contract feature.
+      const FEATURE_INPUTS = {
+        extra: "extra",
+        tables: "tables",
+        fencedCode: "fenced_code",
+        footnotes: "footnotes",
+        toc: "toc",
+        saneLists: "sane_lists",
+        smarty: "smarty",
+        nl2br: "hard_breaks",
+      };
+      const SAFE_MODE = {
+        python: "Python cleans the HTML with bleach: unknown tags and attributes are stripped, links keep only http, https and mailto.",
+        csharp: "Markdig escapes raw HTML (DisableHtml), and the engine blanks links that are not http, https or mailto.",
+        go: "goldmark's default renderer omits raw HTML and empties dangerous links such as javascript:.",
+        cpp: "md4c treats raw HTML as text (MD_FLAG_NOHTML), and the engine blanks links that are not http, https or mailto.",
+      };
 
       const statusEl = document.querySelector("#status");
       const outputEl = document.querySelector("#output");
       const previewEl = document.querySelector("#preview");
       const runButton = document.querySelector("#run");
-      let pyodideReady;
+      const stopButton = document.querySelector("#stop");
       let latestHtml = "";
       let latestDocument = "";
       let latestText = "";
-      let bleachInstallError = "";
+      let language = "python";
+      let live = false;
+      let debounce = 0;
+      let runToken = 0;
+      // What the visitor chose, kept while a language has a feature disabled.
+      const chosen = Object.fromEntries(Object.keys(FEATURE_INPUTS).map((id) => [id, document.querySelector(`#${id}`).checked]));
 
-      async function init() {
-        const pyodide = await getPyodide(statusEl);
-        setStatus(statusEl, "Loading micropip...", "loading");
-        await pyodide.loadPackage("micropip");
-        setStatus(statusEl, "Installing markdown...", "loading");
-        await pyodide.runPythonAsync(`
-import micropip
-await micropip.install("markdown")
-`);
-        setPackageNote("Markdown installed. Installing bleach for optional sanitizing...");
-        try {
-          await pyodide.runPythonAsync(`
-import micropip
-await micropip.install("bleach")
-`);
-          setPackageNote("Markdown and bleach are installed.");
-        } catch (error) {
-          bleachInstallError = error.message;
-          setPackageNote("Markdown installed. Bleach is unavailable, so sanitize mode will report an error.");
+      const engine = createToolEngine({
+        onStatus(update) {
+          if (update.language !== language) return;
+          if (update.phase && PHASES[update.phase]) setStatus(statusEl, PHASES[update.phase], "loading");
+          if (update.progress?.total) setStatus(statusEl, `Downloading the runtime… ${formatProgress(update.progress)}`, "loading");
+        },
+      });
+
+      // Each feature is a toggle, always on (CommonMark fences), or missing in
+      // this language: then it is disabled and unchecked, never silently dropped.
+      function applySupport() {
+        for (const [id, feature] of Object.entries(FEATURE_INPUTS)) {
+          const input = document.querySelector(`#${id}`);
+          const support = SUPPORT[language][feature];
+          input.disabled = support !== "yes";
+          input.checked = support === "always" || (support === "yes" && chosen[id]);
+          input.closest("label").title =
+            support === "always" ? `Always on in ${LANGUAGE_NAMES[language]} (CommonMark)` : support ? "" : `Not available in ${LANGUAGE_NAMES[language]}`;
         }
-        await loadPythonFile(pyodide, "tool.py");
-        setStatus(statusEl, "Markdown ready", "ready");
-        return pyodide;
+        setText(document.querySelector("#safeNote span"), SAFE_MODE[language]);
+      }
+
+      createLanguagePicker({
+        root: document.querySelector("#languagePicker"),
+        languages: LANGUAGES_OFFERED,
+        value: language,
+        onChange(next) {
+          language = next;
+          setText(document.querySelector("#engineName"), "");
+          applySupport();
+          if (live) run();
+        },
+      });
+      applySupport();
+
+      function selectedFeatures() {
+        return Object.entries(FEATURE_INPUTS)
+          .filter(([id]) => {
+            const input = document.querySelector(`#${id}`);
+            return input.checked && !input.disabled;
+          })
+          .map(([, feature]) => feature);
+      }
+
+      function clearOutput(message) {
+        latestHtml = "";
+        latestDocument = "";
+        latestText = "";
+        setText(outputEl, message);
+        previewEl.srcdoc = "";
       }
 
       async function run() {
-        runButton.disabled = true;
+        live = true;
+        const runFor = language;
+        const token = ++runToken;
         setStatus(statusEl, "Converting Markdown...", "loading");
+        stopButton.hidden = false;
         try {
-          const pyodide = await pyodideReady;
-          const extensions = await callPythonJson(pyodide, "build_extensions", {
-            extra: document.querySelector("#extra").checked,
-            tables: document.querySelector("#tables").checked,
-            fenced_code: document.querySelector("#fencedCode").checked,
-            footnotes: document.querySelector("#footnotes").checked,
-            toc: document.querySelector("#toc").checked,
-            sane_lists: document.querySelector("#saneLists").checked,
-            smarty: document.querySelector("#smarty").checked,
-            nl2br: document.querySelector("#nl2br").checked,
-          });
-          const result = await callPythonJson(pyodide, "convert_markdown", {
+          const reply = await engine.call(runFor, "markdown", {
             source: document.querySelector("#source").value,
-            extensions,
-            sanitize: document.querySelector("#sanitize").checked,
+            features: selectedFeatures(),
+            safe: document.querySelector("#sanitize").checked,
           });
-
+          if (runFor !== language || token !== runToken) return;
+          if (!reply.ok) throw new Error(reply.error);
+          const result = reply.output;
+          setText(document.querySelector("#engineName"), result.engine ? `Engine: ${result.engine}` : "");
           if (!result.ok) {
-            setStatus(statusEl, "Markdown error", "error");
-            latestHtml = "";
-            latestDocument = "";
-            latestText = "";
-            setText(outputEl, result.error);
-            previewEl.srcdoc = "";
-            setPackageNote(result.error);
-            activateTab("notesPane");
+            setStatus(statusEl, result.unsupported ? "Not available in this language" : "Markdown error", "error");
+            clearOutput(result.error);
             return;
           }
-
-          setStatus(statusEl, result.sanitized ? "Sanitized HTML ready" : "Conversion complete", "ready");
+          setStatus(statusEl, document.querySelector("#sanitize").checked ? "Safe HTML ready" : "Conversion complete", "ready");
           latestHtml = result.html;
           latestDocument = fullDocumentFor(result.html);
           latestText = plainTextFor(result.html);
           setText(outputEl, latestHtml);
+          // The preview frame is sandbox="": no scripts, no same-origin access.
           previewEl.srcdoc = latestDocument;
-          setPackageNote(result.sanitized ? "Output sanitized with bleach." : packageStatusText());
         } catch (error) {
-          setStatus(statusEl, "Runtime error", "error");
-          latestHtml = "";
-          latestDocument = "";
-          latestText = "";
-          setText(outputEl, error.stack || error.message);
-          setPackageNote(error.message);
-          activateTab("notesPane");
+          if (error.message === "superseded" || token !== runToken) return;
+          setStatus(statusEl, error.message === "stopped" ? "Stopped" : "Runtime error", error.message === "stopped" ? "ready" : "error");
+          clearOutput(error.message === "stopped" ? "Stopped. Convert again to restart the engine." : error.message);
         } finally {
-          runButton.disabled = false;
+          // Only the newest run decides whether Stop is still needed.
+          if (token === runToken) stopButton.hidden = true;
         }
       }
 
-      pyodideReady = init().catch((error) => {
-        setStatus(statusEl, "Package load failed", "error");
-        setText(outputEl, error.stack || error.message);
-        setPackageNote(error.message);
-        activateTab("notesPane");
-        throw error;
-      });
+      function scheduleRun() {
+        if (!live) return;
+        clearTimeout(debounce);
+        debounce = setTimeout(run, 250);
+      }
 
       runButton.addEventListener("click", run);
+      // Stop also cancels a re-run that an edit has scheduled but not started.
+      stopButton.addEventListener("click", () => {
+        clearTimeout(debounce);
+        engine.stop(language);
+      });
+      for (const id of Object.keys(FEATURE_INPUTS)) {
+        document.querySelector(`#${id}`).addEventListener("input", (event) => {
+          chosen[id] = event.currentTarget.checked;
+          scheduleRun();
+        });
+      }
+      for (const id of ["source", "sanitize"]) document.querySelector(`#${id}`).addEventListener("input", scheduleRun);
+      document.querySelector("#viewSource").addEventListener("click", () =>
+        openSourceViewer({ language, title: "Markdown engine", url: sourcePath(language, "markdown") }),
+      );
       document.querySelector("#markdownFile").addEventListener("change", (event) => loadMarkdownFile(event.currentTarget));
       document.querySelector("#copyHtml").addEventListener("click", () => copyText(latestHtml, statusEl));
       document.querySelector("#copyText").addEventListener("click", () => copyPlainText());
@@ -205,6 +282,7 @@ await micropip.install("bleach")
       for (const tab of document.querySelectorAll(".tab-button")) {
         tab.addEventListener("click", () => activateTab(tab.dataset.tab));
       }
+      setStatus(statusEl, "Pick a language and press Convert", "ready");
 
       async function loadMarkdownFile(fileInput) {
         const file = fileInput.files && fileInput.files[0];
@@ -213,6 +291,7 @@ await micropip.install("bleach")
         try {
           document.querySelector("#source").value = await file.text();
           setStatus(statusEl, `Loaded ${file.name}`, "ready");
+          scheduleRun();
         } catch (error) {
           setStatus(statusEl, "File load failed", "error");
         } finally {
@@ -250,14 +329,6 @@ await micropip.install("bleach")
         return "body{font:16px/1.55 system-ui,sans-serif;padding:20px;color:#17202a}table{border-collapse:collapse}td,th{border:1px solid #c9d2d6;padding:6px 9px}pre{background:#111820;color:#e9f0ef;padding:12px;border-radius:7px;overflow:auto}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}";
       }
 
-      function packageStatusText() {
-        return bleachInstallError ? "Bleach is unavailable, so sanitize mode will report an error." : "Markdown and bleach are installed.";
-      }
-
-      function setPackageNote(message) {
-        const note = document.querySelector("#packageNotes span");
-        note.textContent = message;
-      }
     </script>
   </body>
 </html>

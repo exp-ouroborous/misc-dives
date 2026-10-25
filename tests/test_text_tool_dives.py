@@ -162,61 +162,44 @@ class TextDiffToolTests(unittest.TestCase):
 
 
 class MarkdownToolTests(unittest.TestCase):
-    def test_builds_extensions_without_duplicates(self):
-        tool = load_tool("markdown-to-html")
+    """The Markdown page runs a Markdown library in the chosen language inside
+    the wasm-dives sandbox; the engines and their contract tests live there."""
 
-        self.assertEqual(tool.build_extensions(True, True), ["extra", "tables"])
-        self.assertEqual(tool.build_extensions(True, False), ["extra"])
-        self.assertEqual(tool.build_extensions(False, True), ["tables"])
+    def setUp(self):
+        self.page = (ROOT / "dives" / "markdown-to-html" / "index.html").read_text()
 
-    def test_builds_expanded_extension_set(self):
-        tool = load_tool("markdown-to-html")
+    def test_language_picker_and_view_source(self):
+        self.assertIn('id="languagePicker"', self.page)
+        self.assertIn('id="viewSource"', self.page)
+        self.assertIn('id="stop"', self.page)
+        self.assertIn('engine.call(runFor, "markdown"', self.page)
+        self.assertIn('["python", "csharp", "go", "cpp"]', self.page)
 
-        result = tool.build_extensions(
-            extra=False,
-            tables=True,
-            fenced_code=True,
-            footnotes=True,
-            toc=True,
-            sane_lists=True,
-            smarty=True,
-            nl2br=True,
-        )
+    def test_features_follow_the_shared_capability_table(self):
+        # Unavailable features are disabled, never silently dropped.
+        self.assertIn('import("../wasm-assets/markdown-features.mjs")', self.page)
+        self.assertIn("SUPPORT[language]", self.page)
+        self.assertIn('"always"', self.page)
 
-        self.assertEqual(result, ["tables", "fenced_code", "footnotes", "toc", "sane_lists", "smarty", "nl2br"])
+    def test_explains_where_to_run_when_the_engine_modules_are_missing(self):
+        self.assertIn('import("../wasm-assets/', self.page)
+        self.assertNotIn('from "../wasm-assets/', self.page)
+        self.assertIn("https://wordsfortheunwise.com/learn/markdown-to-html/", self.page)
 
-    def test_sanitize_reports_missing_bleach_package(self):
-        tool = load_tool("markdown-to-html")
-        try:
-            import markdown  # noqa: F401
-        except ImportError:
-            self.skipTest("Python markdown package is not installed in local CPython")
+    def test_preview_stays_in_a_script_free_sandbox(self):
+        self.assertIn('<iframe id="preview" class="preview-frame" title="Markdown preview" sandbox=""></iframe>', self.page)
 
-        result = tool.convert_markdown("<script>alert(1)</script>", ["extra"], sanitize=True)
+    def test_stop_cancels_a_scheduled_rerun(self):
+        self.assertIn("clearTimeout(debounce);\n        engine.stop(language);", self.page)
 
-        try:
-            import bleach  # noqa: F401
-        except ImportError:
-            self.assertFalse(result["ok"])
-            self.assertIn("bleach", result["error"].lower())
-        else:
-            self.assertTrue(result["ok"])
-            self.assertNotIn("<script>", result["html"])
-
-    def test_converts_markdown_when_package_is_available(self):
-        tool = load_tool("markdown-to-html")
-        try:
-            import markdown  # noqa: F401
-        except ImportError:
-            self.skipTest("Python markdown package is not installed in local CPython")
-
-        result = tool.convert_markdown("# Hello", ["extra"])
-
-        self.assertTrue(result["ok"])
-        self.assertIn("<h1>Hello</h1>", result["html"])
+    def test_no_in_page_python_or_micropip(self):
+        self.assertNotIn("pyodide.js", self.page)
+        self.assertNotIn("micropip", self.page)
+        self.assertNotIn("innerHTML", self.page)
+        self.assertFalse((ROOT / "dives" / "markdown-to-html" / "tool.py").exists())
 
     def test_markdown_page_has_upgrade_controls(self):
-        page = (ROOT / "dives" / "markdown-to-html" / "index.html").read_text()
+        page = self.page
 
         for control_id in [
             "markdownFile",
