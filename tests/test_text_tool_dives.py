@@ -34,7 +34,14 @@ class RegexToolTests(unittest.TestCase):
         self.assertIn("../wasm-assets/language-picker.mjs", self.page)
         self.assertIn("../wasm-assets/source-viewer.mjs", self.page)
         self.assertIn("../wasm-assets/tool-engine.mjs", self.page)
+        self.assertIn("../wasm-assets/format.mjs", self.page)
         self.assertIn('["python", "csharp", "go", "cpp"]', self.page)
+
+    def test_explains_where_to_run_when_the_engine_modules_are_missing(self):
+        # Served straight from misc-dives.pages.dev there is no /learn/wasm-assets/.
+        self.assertIn('import("../wasm-assets/', self.page)
+        self.assertNotIn('from "../wasm-assets/', self.page)
+        self.assertIn("https://wordsfortheunwise.com/learn/regex-tester/", self.page)
 
     def test_no_in_page_python_and_no_ascii_flag(self):
         self.assertNotIn("pyodide.js", self.page)
