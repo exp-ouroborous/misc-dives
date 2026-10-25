@@ -364,7 +364,11 @@
       }
 
       runButton.addEventListener("click", run);
-      stopButton.addEventListener("click", () => engine.stop(language));
+      // Stop also cancels a re-run that an edit has scheduled but not started.
+      stopButton.addEventListener("click", () => {
+        clearTimeout(debounce);
+        engine.stop(language);
+      });
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
       for (const id of ["pattern", "text", "replacement", "ignorecase", "multiline", "dotall"]) {
         document.querySelector(`#${id}`).addEventListener("input", scheduleRun);

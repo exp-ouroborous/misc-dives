@@ -43,6 +43,9 @@ class RegexToolTests(unittest.TestCase):
         self.assertNotIn('from "../wasm-assets/', self.page)
         self.assertIn("https://wordsfortheunwise.com/learn/regex-tester/", self.page)
 
+    def test_stop_cancels_a_scheduled_rerun(self):
+        self.assertIn("clearTimeout(debounce);\n        engine.stop(language);", self.page)
+
     def test_no_in_page_python_and_no_ascii_flag(self):
         self.assertNotIn("pyodide.js", self.page)
         self.assertNotIn('id="ascii"', self.page)
@@ -73,6 +76,12 @@ class JsonToolTests(unittest.TestCase):
         self.assertIn("healButton.disabled = language !== \"python\"", self.page)
         self.assertIn('id="healNote"', self.page)
         self.assertIn("only available in Python", self.page)
+
+    def test_heal_never_overwrites_newer_edits(self):
+        self.assertIn("sourceEl.value !== submitted", self.page)
+
+    def test_stop_cancels_a_scheduled_rerun(self):
+        self.assertIn("clearTimeout(debounce);\n        engine.stop(language);", self.page)
 
     def test_no_in_page_python_and_no_inner_html(self):
         self.assertNotIn("pyodide.js", self.page)
