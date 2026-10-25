@@ -84,10 +84,25 @@
 
     <script type="module">
       import { copyText, setStatus, setText } from "../assets/pyodide-tools.js";
-      import { createLanguagePicker } from "../wasm-assets/language-picker.mjs";
-      import { openSourceViewer } from "../wasm-assets/source-viewer.mjs";
-      import { createToolEngine, sourcePath } from "../wasm-assets/tool-engine.mjs";
-      import { formatProgress } from "../wasm-assets/format.mjs";
+
+      // The engines and their shell come from wasm-dives through the
+      // wordsfortheunwise.com /learn proxy; served anywhere else they are absent.
+      const MAIN_SITE = "https://wordsfortheunwise.com/learn/regex-tester/";
+      let shell;
+      try {
+        shell = await Promise.all([
+          import("../wasm-assets/language-picker.mjs"),
+          import("../wasm-assets/source-viewer.mjs"),
+          import("../wasm-assets/tool-engine.mjs"),
+          import("../wasm-assets/format.mjs"),
+        ]);
+      } catch {
+        setStatus(document.querySelector("#status"), "Open on wordsfortheunwise.com", "error");
+        setText(document.querySelector("#output"), `This tool runs its regex engines through ${MAIN_SITE} — open it there.`);
+        document.querySelector("#run").disabled = true;
+        throw new Error("wasm-dives tool shell unavailable");
+      }
+      const [{ createLanguagePicker }, { openSourceViewer }, { createToolEngine, sourcePath }, { formatProgress }] = shell;
 
       const LANGUAGES_OFFERED = ["python", "csharp", "go", "cpp"];
       // Each engine spells named groups its own way (C++ has none).
