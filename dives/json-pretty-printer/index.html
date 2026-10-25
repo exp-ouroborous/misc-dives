@@ -217,8 +217,14 @@
         setStatus(statusEl, "Healing JSON...", "loading");
         return guarded(async (runFor, current) => {
           const { minify, ...input } = options();
+          const submitted = input.source;
           const result = await call(runFor, { action: "heal", ...input });
           if (!current()) return;
+          // Never replace text the user typed while the heal was running.
+          if (sourceEl.value !== submitted) {
+            setStatus(statusEl, "Source changed while healing; heal discarded", "ready");
+            return;
+          }
           setText(document.querySelector("#engineName"), `Engine: ${result.engine}`);
           if (!result.ok) {
             setStatus(statusEl, `Could not heal${at(result)}`, "error");
@@ -266,7 +272,11 @@
 
       runButton.addEventListener("click", run);
       healButton.addEventListener("click", healJson);
-      stopButton.addEventListener("click", () => engine.stop(language));
+      // Stop also cancels a re-run that an edit has scheduled but not started.
+      stopButton.addEventListener("click", () => {
+        clearTimeout(debounce);
+        engine.stop(language);
+      });
       copyButton.addEventListener("click", () => copyText(latestOutput, statusEl));
       for (const id of ["source", "indent", "sortKeys", "minify", "allowJsonc"]) {
         document.querySelector(`#${id}`).addEventListener("input", scheduleRun);
