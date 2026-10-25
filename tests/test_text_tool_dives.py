@@ -51,106 +51,36 @@ class RegexToolTests(unittest.TestCase):
 
 
 class JsonToolTests(unittest.TestCase):
-    def test_formats_with_sorting(self):
-        tool = load_tool("json-pretty-printer")
+    """The JSON page runs a JSON engine in the chosen language inside the
+    wasm-dives sandbox; the engines (and the heal tests) live there."""
 
-        result = tool.format_json('{"z":2,"a":{"b":1}}', indent=2, sort_keys=True, minify=False)
+    def setUp(self):
+        self.page = (ROOT / "dives" / "json-pretty-printer" / "index.html").read_text()
 
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["output"], '{\n  "a": {\n    "b": 1\n  },\n  "z": 2\n}')
+    def test_language_picker_and_view_source(self):
+        self.assertIn('id="languagePicker"', self.page)
+        self.assertIn('id="viewSource"', self.page)
+        self.assertIn('id="stop"', self.page)
+        self.assertIn('engine.call(runFor, "json"', self.page)
+        self.assertIn('["python", "csharp", "go", "cpp"]', self.page)
 
-    def test_reports_parse_location(self):
-        tool = load_tool("json-pretty-printer")
+    def test_explains_where_to_run_when_the_engine_modules_are_missing(self):
+        self.assertIn('import("../wasm-assets/', self.page)
+        self.assertNotIn('from "../wasm-assets/', self.page)
+        self.assertIn("https://wordsfortheunwise.com/learn/json-pretty-printer/", self.page)
 
-        result = tool.format_json('{"a":}', indent=2, sort_keys=False, minify=False)
+    def test_heal_is_disabled_outside_python_never_rerouted(self):
+        self.assertIn("healButton.disabled = language !== \"python\"", self.page)
+        self.assertIn('id="healNote"', self.page)
+        self.assertIn("only available in Python", self.page)
 
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["line"], 1)
-        self.assertGreater(result["column"], 0)
-
-    def test_formats_jsonc_when_enabled(self):
-        tool = load_tool("json-pretty-printer")
-        source = """
-        {
-          // user-facing label
-          "name": "Ada",
-          "skills": [
-            "math",
-          ],
-          /* keep boolean values intact */
-          "active": true,
-        }
-        """
-
-        result = tool.format_json(source, indent=2, sort_keys=True, minify=False, allow_jsonc=True)
-        analysis = tool.analyze_json(source, allow_jsonc=True)
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada",\n  "skills": [\n    "math"\n  ]\n}')
-        self.assertTrue(analysis["ok"])
-        self.assertEqual(analysis["summary"]["root_type"], "object")
-
-    def test_analyzes_tree_paths_for_explorer(self):
-        tool = load_tool("json-pretty-printer")
-
-        result = tool.analyze_json('{"users":[{"name":"Ada","active":true}],"count":1}')
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["summary"]["root_type"], "object")
-        self.assertEqual(result["summary"]["total_nodes"], 6)
-        self.assertEqual(result["summary"]["max_depth"], 4)
-        self.assertEqual(result["tree"]["path"], "$")
-        self.assertEqual(result["tree"]["children"][0]["path"], "$.users")
-        self.assertEqual(result["tree"]["children"][0]["children"][0]["path"], "$.users[0]")
-        self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["path"], "$.users[0].name")
-        self.assertEqual(result["tree"]["children"][0]["children"][0]["children"][0]["preview"], '"Ada"')
-
-    def test_heals_missing_quotes_and_closing_brace(self):
-        tool = load_tool("json-pretty-printer")
-
-        result = tool.heal_json("{name:Ada, active:true")
-
-        self.assertTrue(result["ok"])
-        self.assertTrue(result["repaired"])
-        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
-        self.assertIn("quoted bare key", " ".join(result["repairs"]))
-        self.assertIn("quoted bare string value", " ".join(result["repairs"]))
-        self.assertIn("appended missing closing", " ".join(result["repairs"]))
-
-    def test_heals_missing_comma_between_object_members(self):
-        tool = load_tool("json-pretty-printer")
-
-        result = tool.heal_json('{"name":"Ada" "active":true}')
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
-        self.assertIn("inserted missing comma", " ".join(result["repairs"]))
-        self.assertEqual(result["repaired_source"], '{"name":"Ada", "active":true}')
-        self.assertIn({"text": ",", "added": True}, result["diff_segments"])
-
-    def test_heals_missing_string_end_quote_before_next_key(self):
-        tool = load_tool("json-pretty-printer")
-
-        result = tool.heal_json('{"name":"Ada "active":true}')
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["output"], '{\n  "active": true,\n  "name": "Ada"\n}')
-        self.assertIn("closed unterminated string value", " ".join(result["repairs"]))
-        self.assertEqual(result["repaired_source"], '{"name":"Ada", "active":true}')
-        self.assertTrue(any(segment["added"] and '"' in segment["text"] for segment in result["diff_segments"]))
-        self.assertTrue(any(segment["added"] and "," in segment["text"] for segment in result["diff_segments"]))
-
-    def test_heal_rejects_unfixable_json(self):
-        tool = load_tool("json-pretty-printer")
-
-        result = tool.heal_json("{name:}")
-
-        self.assertFalse(result["ok"])
-        self.assertFalse(result["repaired"])
-        self.assertIn("Expecting value", result["error"])
+    def test_no_in_page_python_and_no_inner_html(self):
+        self.assertNotIn("pyodide.js", self.page)
+        self.assertNotIn("innerHTML", self.page)
+        self.assertFalse((ROOT / "dives" / "json-pretty-printer" / "tool.py").exists())
 
     def test_json_page_has_explorer_regions(self):
-        page = (ROOT / "dives" / "json-pretty-printer" / "index.html").read_text()
+        page = self.page
 
         self.assertIn('id="jsonBanner"', page)
         self.assertIn('id="jsonTree"', page)

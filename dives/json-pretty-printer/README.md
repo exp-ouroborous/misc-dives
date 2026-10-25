@@ -15,3 +15,15 @@ The stdlib JSON decoder gives useful line and column information, which makes br
 ## What should happen next, if anything?
 
 Add JSONPath-style extraction only if this stops being a simple pretty printer.
+
+## Update (2026-10-25): every language
+
+The page now formats, validates and analyses JSON in the language you pick —
+Python's `json`, .NET's `System.Text.Json`, Go's `encoding/json`, or a
+hand-written C++ parser (the C++ standard library has no JSON) — each in
+WebAssembly inside the wasm-dives sandbox (a separate origin). The engines and
+their shared contract tests live in the `wasm-dives` repo
+(`site/run/<lang>/engines/json.*`, `tests/engines/json-cases.json`), along with
+the heal tests that used to be here. Heal stays Python-only and is shown
+disabled for the other languages rather than quietly using Python. `tool.py`
+is gone.
